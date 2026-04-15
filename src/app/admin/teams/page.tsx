@@ -1,0 +1,234 @@
+"use client";
+
+import { useState, useEffect } from "react";
+
+interface Schedule {
+  id: string;
+  team_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  active: boolean;
+}
+
+interface Team {
+  id: string;
+  name: string;
+  whatsapp_number: string | null;
+  active: boolean;
+  created_at: string;
+  schedules: Schedule[];
+  bookings_this_week: number;
+  bookings_this_month: number;
+}
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const CARD: React.CSSProperties = {
+  background: "white",
+  border: "2px solid rgb(238,240,244)",
+  borderRadius: 16,
+};
+
+export default function TeamsPage() {
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  async function fetchTeams() {
+    const res = await fetch("/api/admin/teams");
+    const data = await res.json();
+    setTeams(data.teams);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    fetchTeams();
+  }, []);
+
+  async function toggleTeam(id: string, active: boolean) {
+    setToggling(id);
+    await fetch("/api/admin/teams", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, active: !active }),
+    });
+    setTeams((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, active: !active } : t))
+    );
+    setToggling(null);
+  }
+
+  function formatTime(t: string) {
+    const [h, m] = t.split(":");
+    const hour = parseInt(h);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    return `${hour % 12 || 12}:${m} ${ampm}`;
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div
+          className="w-8 h-8 rounded-full border-[3px] border-[rgb(238,240,244)] border-t-[rgb(147,216,216)] animate-spin"
+          role="status"
+          aria-label="Loading"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="grid gap-4">
+        {teams.map((team) => {
+          const activeDays = team.schedules
+            .filter((s) => s.active)
+            .sort((a, b) => a.day_of_week - b.day_of_week);
+
+          return (
+            <div key={team.id} className="p-6" style={CARD}>
+              {/* Header */}
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className="w-9 h-9 rounded-[10px] flex items-center justify-center text-[14px] font-medium"
+                      style={{
+                        background: team.active
+                          ? "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))"
+                          : "rgb(238,240,244)",
+                        color: team.active ? "white" : "rgb(160,165,175)",
+                        fontFamily: "var(--font-badge)",
+                      }}
+                    >
+                      {team.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h2
+                        className="text-[16px] font-normal tracking-[-0.02em]"
+                        style={{
+                          fontFamily: "var(--font-heading)",
+                          color: "rgb(61,61,61)",
+                        }}
+                      >
+                        {team.name}
+                      </h2>
+                      {team.whatsapp_number && (
+                        <p
+                          className="text-[12px] mt-0.5"
+                          style={{
+                            fontFamily: "var(--font-body)",
+                            color: "rgb(160,165,175)",
+                          }}
+                        >
+                          {team.whatsapp_number}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={toggling === team.id}
+                  onClick={() => toggleTeam(team.id, team.active)}
+                  className="text-[13px] px-4 py-2 rounded-[10px] border-2 font-medium transition-all disabled:opacity-50"
+                  style={{
+                    fontFamily: "var(--font-cta)",
+                    borderColor: team.active
+                      ? "rgba(239,68,68,0.2)"
+                      : "rgba(34,197,94,0.2)",
+                    color: team.active ? "rgb(239,68,68)" : "rgb(34,197,94)",
+                    background: team.active
+                      ? "rgba(239,68,68,0.04)"
+                      : "rgba(34,197,94,0.04)",
+                  }}
+                >
+                  {team.active ? "Deactivate" : "Activate"}
+                </button>
+              </div>
+
+              {/* Schedule */}
+              <div className="mt-5 flex flex-wrap gap-2">
+                {DAYS.map((day, i) => {
+                  const sched = activeDays.find((s) => s.day_of_week === i);
+                  return (
+                    <span
+                      key={day}
+                      className="text-[12px] px-3 py-1.5 rounded-[8px] font-medium"
+                      style={{
+                        fontFamily: "var(--font-badge)",
+                        background: sched
+                          ? "rgba(147,216,216,0.12)"
+                          : "rgb(247,248,250)",
+                        color: sched
+                          ? "rgb(60,140,130)"
+                          : "rgb(190,195,205)",
+                      }}
+                    >
+                      {day}
+                      {sched && (
+                        <span
+                          className="ml-1.5"
+                          style={{ color: "rgb(100,170,160)" }}
+                        >
+                          {formatTime(sched.start_time)}-
+                          {formatTime(sched.end_time)}
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+
+              {/* Workload + ID */}
+              <div
+                className="mt-4 pt-4 flex items-center justify-between border-t"
+                style={{ borderColor: "rgb(245,246,248)" }}
+              >
+                <div className="flex gap-5">
+                  <div className="flex items-center gap-1.5">
+                    <div
+                      className="w-[4px] h-[14px] rounded-full"
+                      style={{ background: "rgb(147,216,216)" }}
+                    />
+                    <span
+                      className="text-[12px]"
+                      style={{
+                        fontFamily: "var(--font-body)",
+                        color: "rgb(140,145,155)",
+                      }}
+                    >
+                      Week: {team.bookings_this_week}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div
+                      className="w-[4px] h-[14px] rounded-full"
+                      style={{ background: "rgb(149,207,140)" }}
+                    />
+                    <span
+                      className="text-[12px]"
+                      style={{
+                        fontFamily: "var(--font-body)",
+                        color: "rgb(140,145,155)",
+                      }}
+                    >
+                      Month: {team.bookings_this_month}
+                    </span>
+                  </div>
+                </div>
+                <span
+                  className="text-[11px] font-mono"
+                  style={{ color: "rgb(200,205,215)" }}
+                >
+                  {team.id.slice(0, 8)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
