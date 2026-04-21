@@ -1,0 +1,83 @@
+{
+  "name": "Ductly — Payment Failed",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "payment-failed",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Payment Failed",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "payment-failed"
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@ductly.ae",
+        "toEmail": "={{ $json.customer_email }}",
+        "subject": "Payment Issue — DUCTly Booking",
+        "emailType": "html",
+        "html": "<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"></head>\n<body style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7f8fa; padding: 40px 20px;\">\n<div style=\"max-width: 520px; margin: 0 auto; background: white; border-radius: 16px; border: 2px solid #eef0f4; padding: 40px;\">\n  <img src=\"https://ductly.ae/images/logo.png\" alt=\"DUCTly\" style=\"height: 36px; margin-bottom: 24px;\" />\n  <h1 style=\"font-size: 22px; color: #3d3d3d; margin: 0 0 8px;\">Payment Issue</h1>\n  <p style=\"color: #a0a5af; font-size: 14px; margin: 0 0 24px;\">We couldn't process your payment for your duct cleaning booking.</p>\n  \n  <div style=\"background: #fff5f5; border: 1px solid #ffc8c8; border-radius: 12px; padding: 16px; margin-bottom: 24px;\">\n    <p style=\"color: #b43c3c; font-size: 14px; margin: 0;\">{{ $json.error_message }}</p>\n  </div>\n\n  <p style=\"font-size: 14px; color: #6d6d6d;\">Please try booking again. If the issue persists, contact your bank or try a different card.</p>\n  \n  <a href=\"{{ $env.APP_URL }}/book\" style=\"display: inline-block; background: linear-gradient(135deg, #93d8d8, #95cf8c); color: white; text-decoration: none; padding: 12px 28px; border-radius: 40px; font-size: 14px; font-weight: 500; margin-top: 16px;\">Try Again</a>\n</div>\n</body>\n</html>",
+        "options": {}
+      },
+      "id": "send-failure-email",
+      "name": "Send Failure Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [500, 200],
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURE_ME",
+          "name": "SMTP — configure in n8n credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@ductly.ae",
+        "toEmail": "admin@ductly.ae",
+        "subject": "⚠ Payment Failed — Booking {{ $json.booking_id }}",
+        "emailType": "html",
+        "html": "<!DOCTYPE html>\n<html>\n<body style=\"font-family: monospace; padding: 20px;\">\n<h2>Payment Failed</h2>\n<table>\n<tr><td><strong>Booking ID:</strong></td><td>{{ $json.booking_id }}</td></tr>\n<tr><td><strong>Payment Intent:</strong></td><td>{{ $json.payment_intent_id }}</td></tr>\n<tr><td><strong>Error:</strong></td><td>{{ $json.error_message }}</td></tr>\n<tr><td><strong>Customer Email:</strong></td><td>{{ $json.customer_email }}</td></tr>\n</table>\n</body>\n</html>",
+        "options": {}
+      },
+      "id": "notify-admin",
+      "name": "Notify Admin",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [500, 420],
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURE_ME",
+          "name": "SMTP — configure in n8n credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: Payment Failed": {
+      "main": [
+        [
+          { "node": "Send Failure Email", "type": "main", "index": 0 },
+          { "node": "Notify Admin", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "ductly" },
+    { "name": "payment" },
+    { "name": "alert" }
+  ],
+  "pinData": {},
+  "versionId": "1"
+}

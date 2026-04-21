@@ -72,60 +72,153 @@ DUCTLY/
 ├── tsconfig.json
 ├── postcss.config.mjs
 ├── next.config.mjs
+├── vitest.config.ts
 ├── docs/
 │   ├── MASTER_REFERENCE.md          # Architecture, schema, pricing, decisions
 │   ├── PHASE_1_PLAN.md              # Phase 1 action plan (completed)
 │   └── BUILD_CONTEXT.md             # THIS FILE — full build state
 ├── scripts/
 │   ├── seed.js                      # Seeds 3 teams + Sun-Thu schedules
-│   └── test-scenario.js             # Scenario test: Al Nahda → JBR
+│   ├── 003_rate_limit.sql           # Rate limit table migration
+│   └── 004_contact_newsletter.sql   # Contact + newsletter tables migration
 ├── supabase/
 │   └── schema.sql                   # Full DDL — run in Supabase SQL Editor (ALREADY RUN)
 └── src/
-    ├── middleware.ts                 # Auth token refresh via Supabase
+    ├── middleware.ts                 # Auth token refresh + admin route protection
+    ├── instrumentation.ts           # Next.js instrumentation hook
     ├── types/
     │   └── supabase.ts              # Full Database type definitions (9 tables)
     ├── utils/supabase/
     │   ├── server.ts                # SSR createClient (cookies-based)
     │   ├── client.ts                # Browser createClient
+    │   ├── admin.ts                 # Service role client (supabaseAdmin)
     │   └── middleware.ts            # updateSession helper
     ├── lib/
-    │   ├── stripe.ts                # Stripe instance (apiVersion: "2025-04-30.basil")
+    │   ├── stripe.ts                # Stripe instance
     │   ├── travel-math.ts           # getTravelTime() — geocode → geohash → cache → Google Maps
-    │   └── scheduling-agent.ts      # Layer 2 AI agent (GPT-4o via OpenRouter) + fallback
+    │   ├── travel-math.test.ts      # Travel math unit tests
+    │   ├── scheduling-agent.ts      # Layer 2 AI agent (GPT-4o via OpenRouter) + fallback
+    │   ├── scheduling-agent.test.ts # Scheduling agent unit tests
+    │   ├── admin-auth.ts            # requireAdmin() — cookie + API key auth check
+    │   ├── admin-auth.test.ts       # Admin auth unit tests
+    │   ├── rate-limit.ts            # In-memory rate limiter
+    │   ├── rate-limit.test.ts       # Rate limit unit tests
+    │   ├── slot-helpers.ts          # Slot calculation helpers
+    │   ├── slot-helpers.test.ts     # Slot helpers unit tests
+    │   ├── env.ts                   # Environment variable helpers
+    │   └── env.test.ts              # Env helpers unit tests
     ├── components/
     │   └── Header.tsx               # Shared header with "Book Now" link
+    ├── __tests__/
+    │   ├── setup.ts                 # Test setup file
+    │   ├── middleware.test.ts        # Middleware tests
+    │   └── api/
+    │       ├── admin-auth.test.ts    # Admin auth route tests
+    │       ├── admin-routes.test.ts  # Admin bookings/teams/stats route tests
+    │       ├── admin-stats.test.ts   # Admin stats route tests
+    │       ├── admin-travel.test.ts  # Admin travel calc route tests
+    │       ├── booking-details.test.ts # Booking details route tests
+    │       ├── booking-locks.test.ts # Booking locks route tests
+    │       ├── checkout.test.ts      # Checkout route tests
+    │       ├── contact.test.ts       # Contact form route tests
+    │       ├── health.test.ts        # Health check route tests
+    │       ├── manage-cancel.test.ts # Customer cancel route tests
+    │       ├── manage-reschedule.test.ts # Customer reschedule route tests
+    │       ├── newsletter.test.ts    # Newsletter route tests
+    │       ├── rate-limit.test.ts    # Rate limit route tests
+    │       ├── slots.test.ts         # Slots route tests
+    │       └── webhook-stripe.test.ts # Stripe webhook tests
     ├── app/
     │   ├── globals.css              # @import "tailwindcss";
     │   ├── layout.tsx               # Root layout (Inter font, metadata)
-    │   ├── page.tsx                 # Landing page (placeholder)
-    │   ├── actions.ts               # Sample server action: getActiveTeams()
+    │   ├── page.tsx                 # Landing page
+    │   ├── loading.tsx              # Global loading state
+    │   ├── error.tsx                # Global error boundary
+    │   ├── not-found.tsx            # 404 page
+    │   ├── actions.ts               # Server action: getActiveTeams()
+    │   ├── privacy/
+    │   │   └── page.tsx             # Privacy policy page
+    │   ├── terms/
+    │   │   └── page.tsx             # Terms of service page
     │   ├── book/
     │   │   ├── layout.tsx           # Booking layout with Header
-    │   │   ├── page.tsx             # Full booking flow (date → slots → form → Stripe)
+    │   │   ├── page.tsx             # Full booking flow orchestrator
+    │   │   ├── CalendarStep.tsx      # Step 1: Date picker
+    │   │   ├── DetailsStep.tsx       # Step 2: Customer details form
+    │   │   ├── CheckoutStep.tsx      # Step 3: Payment / Stripe redirect
+    │   │   ├── shared.tsx           # Shared booking types + styles
     │   │   └── success/
     │   │       └── page.tsx         # Post-payment confirmation page
+    │   ├── my-booking/
+    │   │   └── manage/
+    │   │       └── page.tsx         # Customer self-service booking management
     │   ├── admin/
-    │   │   ├── layout.tsx           # Admin layout with dark nav + nav links
+    │   │   ├── layout.tsx           # Admin layout: sidebar nav (8 items) + top bar
     │   │   ├── page.tsx             # Dashboard (stats, recent bookings, workloads)
+    │   │   ├── login/
+    │   │   │   ├── layout.tsx       # Login page layout (no sidebar)
+    │   │   │   └── page.tsx         # Admin login form (Supabase Auth)
     │   │   ├── bookings/
-    │   │   │   └── page.tsx         # Bookings list with filters + pagination
-    │   │   └── teams/
-    │   │       └── page.tsx         # Team management (schedules, activate/deactivate)
+    │   │   │   ├── page.tsx         # Bookings list: filters, pagination, clickable rows
+    │   │   │   └── [id]/
+    │   │   │       └── page.tsx     # Booking detail: customer, payment, team, actions
+    │   │   ├── customers/
+    │   │   │   └── page.tsx         # Customer list: search, booking counts, pagination
+    │   │   ├── teams/
+    │   │   │   └── page.tsx         # Team management (schedules, activate/deactivate)
+    │   │   ├── feedback/
+    │   │   │   └── page.tsx         # Reviews: ratings, team summaries, filters
+    │   │   ├── contacts/
+    │   │   │   └── page.tsx         # Inbox: contact forms + newsletter subscribers
+    │   │   ├── errors/
+    │   │   │   └── page.tsx         # Error log: expandable entries, flow filter
+    │   │   └── travel/
+    │   │       └── page.tsx         # Travel time calculator with history
     │   └── api/
+    │       ├── health/
+    │       │   └── route.ts         # GET /api/health — system health check
     │       ├── slots/
     │       │   └── route.ts         # GET /api/slots — Layer 1 slot filter
     │       ├── booking-locks/
     │       │   └── route.ts         # POST + DELETE /api/booking-locks
+    │       ├── booking-details/
+    │       │   └── route.ts         # GET /api/booking-details — public booking lookup
     │       ├── checkout/
     │       │   └── route.ts         # POST /api/checkout — Stripe Checkout session
+    │       ├── contact/
+    │       │   └── route.ts         # POST /api/contact — contact form submission
+    │       ├── newsletter/
+    │       │   └── route.ts         # POST /api/newsletter — newsletter signup
+    │       ├── manage/
+    │       │   └── [token]/
+    │       │       ├── route.ts     # GET /api/manage/[token] — customer booking lookup
+    │       │       ├── cancel/
+    │       │       │   └── route.ts # POST — customer self-cancel + refund
+    │       │       └── reschedule/
+    │       │           └── route.ts # POST — customer self-reschedule
     │       ├── admin/
+    │       │   ├── auth/
+    │       │   │   └── route.ts     # POST (login) + DELETE (logout) /api/admin/auth
     │       │   ├── stats/
     │       │   │   └── route.ts     # GET /api/admin/stats — dashboard data
     │       │   ├── bookings/
-    │       │   │   └── route.ts     # GET /api/admin/bookings — paginated list
-    │       │   └── teams/
-    │       │       └── route.ts     # GET + PATCH /api/admin/teams
+    │       │   │   ├── route.ts     # GET /api/admin/bookings — paginated list
+    │       │   │   └── [id]/
+    │       │   │       ├── route.ts # GET + PATCH /api/admin/bookings/[id] — detail + actions
+    │       │   │       └── cancel/
+    │       │   │           └── route.ts # POST — admin cancel + refund
+    │       │   ├── customers/
+    │       │   │   └── route.ts     # GET /api/admin/customers — search + paginated list
+    │       │   ├── teams/
+    │       │   │   └── route.ts     # GET + PATCH /api/admin/teams
+    │       │   ├── feedback/
+    │       │   │   └── route.ts     # GET /api/admin/feedback — reviews + team summaries
+    │       │   ├── contacts/
+    │       │   │   └── route.ts     # GET /api/admin/contacts — submissions + newsletter
+    │       │   ├── errors/
+    │       │   │   └── route.ts     # GET /api/admin/errors — error log viewer
+    │       │   └── travel/
+    │       │       └── route.ts     # POST /api/admin/travel — travel time calculator
     │       └── webhooks/stripe/
     │           └── route.ts         # POST /api/webhooks/stripe — payment handler
 ```
@@ -261,6 +354,102 @@ DUCTLY/
    - TODO: Trigger n8n webhook for failure notification
 
 **Security**: Full Stripe signature verification via `stripe.webhooks.constructEvent()`
+
+### POST + DELETE /api/admin/auth
+
+**File**: `src/app/api/admin/auth/route.ts`
+**Purpose**: Admin login/logout via Supabase Auth.
+
+**POST (login)**: Accepts `{ email, password }`. Calls `supabase.auth.signInWithPassword()`. Sets `admin-token` (httpOnly, 8h TTL) and `admin-refresh` (httpOnly, 7d TTL) cookies.
+
+**DELETE (logout)**: Clears both cookies by setting `maxAge: 0`.
+
+### GET /api/manage/[token]
+
+**File**: `src/app/api/manage/[token]/route.ts`
+**Purpose**: Customer looks up their booking by manage token (e.g. `bk_xxx`).
+**Returns**: Booking details + customer info for the self-service management page.
+
+### POST /api/manage/[token]/cancel
+
+**File**: `src/app/api/manage/[token]/cancel/route.ts`
+**Purpose**: Customer self-cancels their booking.
+**Rules**: Must be "confirmed" status. Must be 24+ hours before slot_start. Issues Stripe refund automatically. Rate limited (5 attempts per 5 minutes per IP).
+
+### POST /api/manage/[token]/reschedule
+
+**File**: `src/app/api/manage/[token]/reschedule/route.ts`
+**Purpose**: Customer reschedules to a new time slot.
+**Body**: `{ new_slot_start, new_slot_end? }`. If `new_slot_end` omitted, defaults to +90 minutes.
+**Rules**: Must be "confirmed" status. Must be 24+ hours before current slot. New slot must be in the future. Checks for slot conflicts. Clears old slot_lock, re-runs team assignment. Rate limited.
+
+### GET + PATCH /api/admin/bookings/[id]
+
+**File**: `src/app/api/admin/bookings/[id]/route.ts`
+
+**GET**: Returns full booking detail including customer info, assigned team, all active teams (for reassignment dropdown), and slot lock.
+
+**PATCH**: Updates booking status or team assignment.
+- **Body**: `{ status?, team_id? }`
+- **Allowed statuses**: pending, confirmed, completed, cancelled, no_show
+- **Team reassignment**: Validates team is active, deletes old slot_lock, creates new slot_lock
+- Sets `completed_at` or `no_show_at` timestamps when marking those statuses
+
+### POST /api/admin/bookings/[id]/cancel
+
+**File**: `src/app/api/admin/bookings/[id]/cancel/route.ts`
+**Purpose**: Admin cancels a booking. No 24-hour restriction (unlike customer cancel).
+**Body**: `{ reason?, issue_refund? }`. Defaults: empty reason, issue_refund=true.
+**Flow**: Issues Stripe refund if requested, updates status to "cancelled", records cancellation metadata, releases slot_lock.
+
+### GET /api/admin/customers?search=&page=1
+
+**File**: `src/app/api/admin/customers/route.ts`
+**Purpose**: Paginated customer list with search.
+**Search**: Matches against name, email, or phone (case-insensitive `ilike`).
+**Enrichment**: Fetches booking count per customer from bookings table.
+
+### GET /api/admin/errors?page=1&flow=
+
+**File**: `src/app/api/admin/errors/route.ts`
+**Purpose**: Paginated error log viewer.
+**Filters**: Optional `flow` param filters by `flow_name`.
+**Returns**: Error entries + list of distinct flow names for the filter dropdown.
+
+### GET /api/admin/feedback?page=1&team_id=&min_rating=
+
+**File**: `src/app/api/admin/feedback/route.ts`
+**Purpose**: Feedback/reviews with enriched data.
+**Enrichment**: Joins feedback → bookings → customers → teams to get customer name, team name, address.
+**Summary**: Returns `feedback_summary` view data (avg_rating + review_count per team).
+**Filters**: Optional `team_id` filter, optional `min_rating` filter.
+
+### GET /api/admin/contacts?page=1&tab=submissions|newsletter
+
+**File**: `src/app/api/admin/contacts/route.ts`
+**Purpose**: View contact form submissions and newsletter subscribers.
+**Tab=submissions** (default): Returns `contact_submissions` table (name, email, phone, message).
+**Tab=newsletter**: Returns `newsletter_subscribers` table (email, subscribed_at).
+
+### POST /api/admin/travel
+
+**File**: `src/app/api/admin/travel/route.ts`
+**Purpose**: Admin travel time calculator. Geocodes origin/destination, calls Google Maps Distance Matrix, returns distance, duration (normal + traffic), buffer, geohashes, and total blocked time for slot scheduling.
+
+### POST /api/contact
+
+**File**: `src/app/api/contact/route.ts`
+**Purpose**: Public contact form submission. Rate limited. Stores in `contact_submissions` table.
+
+### POST /api/newsletter
+
+**File**: `src/app/api/newsletter/route.ts`
+**Purpose**: Newsletter email signup. Stores in `newsletter_subscribers` table.
+
+### GET /api/health
+
+**File**: `src/app/api/health/route.ts`
+**Purpose**: System health check. Verifies Supabase connectivity.
 
 ---
 
@@ -415,6 +604,53 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 - [x] Admin layout with nav (Dashboard, Bookings, Teams)
 - [x] Build passes clean
 
+### Phase 5: Customer Self-Service + Public Pages (DONE)
+- [x] `/privacy` — privacy policy page
+- [x] `/terms` — terms of service page
+- [x] Landing page redesign with hero, services, pricing, FAQ sections
+- [x] GET /api/manage/[token] — customer booking lookup by manage token
+- [x] POST /api/manage/[token]/cancel — customer self-cancel with 24h window + Stripe refund
+- [x] POST /api/manage/[token]/reschedule — customer self-reschedule with 24h window + slot conflict check
+- [x] `/my-booking/manage` — customer self-service page (view, cancel, reschedule)
+- [x] POST /api/contact — contact form with rate limiting
+- [x] POST /api/newsletter — newsletter signup
+- [x] GET /api/health — system health check
+- [x] GET /api/booking-details — public booking lookup
+- [x] Rate limiting module (`src/lib/rate-limit.ts`) — in-memory rate limiter
+- [x] Admin auth module (`src/lib/admin-auth.ts`) — cookie + API key authentication
+- [x] POST /api/admin/auth — Supabase Auth login, sets httpOnly cookie (8h TTL)
+- [x] DELETE /api/admin/auth — logout, clears cookies
+- [x] `/admin/login` — admin login page (email + password via Supabase Auth)
+- [x] Admin middleware — protects /admin routes, redirects to login
+- [x] POST /api/admin/bookings/[id]/cancel — admin cancel (no 24h restriction) + optional refund
+- [x] POST /api/admin/travel — travel time calculator endpoint
+- [x] `/admin/travel` — travel time calculator UI with history
+- [x] Full test suite: 179 tests across 22 test files, all passing
+- [x] Build passes clean
+
+### Phase 6: Admin Panel Expansion (DONE)
+- [x] GET + PATCH /api/admin/bookings/[id] — booking detail fetch + status/team update
+- [x] GET /api/admin/customers — customer list with search + booking counts
+- [x] GET /api/admin/errors — error log viewer with flow filter
+- [x] GET /api/admin/feedback — reviews with team enrichment + summary stats
+- [x] GET /api/admin/contacts — contact submissions + newsletter subscribers
+- [x] `/admin/bookings/[id]` — full booking detail page with:
+  - Appointment info (slot, address, reschedule history)
+  - Customer details (name, phone, email, WhatsApp opt-in)
+  - Payment info (payment intent, refund status, cancellation details)
+  - Team assignment with reassignment dropdown
+  - Action buttons: Mark Completed, Mark No-Show, Cancel + Refund, Confirm
+  - Manage token link (copyable customer self-service URL)
+  - Slot lock info
+- [x] `/admin/customers` — searchable customer list (name/phone/email), booking counts, WhatsApp opt-in, pagination
+- [x] `/admin/errors` — error log viewer with flow filter, expandable JSON payloads, healthy state indicator
+- [x] `/admin/feedback` — reviews page with star ratings, overall/per-team average cards, team filter
+- [x] `/admin/contacts` — tabbed inbox: contact form submissions + newsletter subscribers
+- [x] Admin sidebar updated to 8 nav items: Dashboard, Bookings, Customers, Teams, Reviews, Inbox, Error Log, Travel Calc
+- [x] Bookings table rows are clickable → navigate to detail page
+- [x] Fixed pre-existing test bug: reschedule test mock had `update` instead of `delete` for slot_locks + missing `assignTeamToBooking` mock
+- [x] 179/179 tests passing, zero TypeScript errors
+
 ---
 
 ## 11. WHAT'S NOT BUILT YET (remaining work)
@@ -429,19 +665,35 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 7. No-show follow-up
 8. Payment failure notification
 
-### Authentication & Security
-- Supabase Auth integration (customer login, admin login)
-- RLS policies tightened (currently permissive for development)
-- Admin role enforcement
+### Admin Panel — Remaining Gaps
+- Calendar / timeline view (visual day schedule per team)
+- Schedule CRUD (edit team working hours, block dates, create teams)
+- Revenue / payments dashboard (daily/weekly/monthly totals, refund tracking)
+- Global search across bookings, customers, teams
+- Manual booking creation (phone-in bookings bypassing website)
+- Data export (CSV/Excel for accounting)
+- Settings page (reschedule window, job duration, pricing — currently hardcoded)
+- Slot lock / availability monitor (current active locks, expired lock cleanup status)
+- Real-time activity feed / notifications
+
+### Admin Authentication — SETUP REQUIRED
+- Admin login uses **Supabase Auth** (email/password). No admin user exists by default.
+- **To create an admin user**: Go to Supabase Dashboard → Authentication → Users → Add user → Create new user with email and password.
+- The login page is at `/admin/login`. Uses the email/password to authenticate via `supabase.auth.signInWithPassword()`.
+- Auth token stored as httpOnly cookie (`admin-token`, 8h TTL) + refresh token (`admin-refresh`, 7d TTL).
+- In development without `ADMIN_API_KEY` set, admin routes are open (no auth required).
 
 ### Deployment
 - Vercel deployment
 - Update Stripe webhook URL to real Vercel domain
 - Update NEXT_PUBLIC_APP_URL in production env
 
-### Database Migrations Completed (Phase 4)
+### Database Migrations Completed (Phase 4+)
 - [x] UNIQUE constraint on customers.email
 - [x] "payment_failed" added to bookings status CHECK constraint
+- [x] contact_submissions table (scripts/004_contact_newsletter.sql)
+- [x] newsletter_subscribers table (scripts/004_contact_newsletter.sql)
+- [x] rate_limits table (scripts/003_rate_limit.sql)
 
 ---
 

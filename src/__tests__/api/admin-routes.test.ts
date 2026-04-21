@@ -8,14 +8,12 @@ vi.mock("@/lib/admin-auth", () => ({
   requireAdmin: vi.fn().mockReturnValue(null),
 }));
 
-// Mock supabase/server (used by admin routes instead of admin client)
+// Mock supabaseAdmin (admin routes use service role client)
 const mockSupabaseClient = { from: vi.fn(), };
-vi.mock("@/utils/supabase/server", () => ({
-  createClient: vi.fn().mockResolvedValue(
-    new Proxy({}, {
-      get: (_t, prop) => (prop === "from" ? mockSupabaseClient.from : undefined),
-    })
-  ),
+vi.mock("@/utils/supabase/admin", () => ({
+  supabaseAdmin: new Proxy({}, {
+    get: (_t, prop) => (prop === "from" ? mockSupabaseClient.from : undefined),
+  }),
 }));
 
 // ─── Admin bookings route ───────────────────────────────────────────────────

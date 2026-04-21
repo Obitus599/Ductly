@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { type Step, PLANS, type SlotResponse, type LockResponse } from "./shared";
+import { type Step, PLANS, calcJobDuration, type SlotResponse, type LockResponse } from "./shared";
 import DetailsStep from "./DetailsStep";
 import CalendarStep from "./CalendarStep";
 import CheckoutStep from "./CheckoutStep";
+import { type AddressDetails, EMPTY_ADDRESS } from "./AddressPicker";
 
 /* ─── Step Indicator ────────────────────────────────────────────────── */
 
@@ -84,7 +85,7 @@ function BookingFlow() {
   const [propertyType, setPropertyType] = useState<"villa" | "apartment" | "office">("apartment");
   const [bedrooms, setBedrooms] = useState(1);
   const [thermostats, setThermostats] = useState(1);
-  const [address, setAddress] = useState("");
+  const [addressDetails, setAddressDetails] = useState<AddressDetails>(EMPTY_ADDRESS);
 
   /* calendar state */
   const [selectedDate, setSelectedDate] = useState("");
@@ -154,6 +155,12 @@ function BookingFlow() {
     return tomorrow.toISOString().split("T")[0];
   }, []);
 
+  /* job duration depends on plan + thermostat count */
+  const jobDurationMins = useMemo(
+    () => calcJobDuration(plan, thermostats),
+    [plan, thermostats]
+  );
+
   /* fetch slots (aborts stale requests on rapid date clicks) */
   const fetchSlots = useCallback(async (date: string) => {
     abortRef.current?.abort();
@@ -165,8 +172,8 @@ function BookingFlow() {
     setSlots([]);
     setSelectedSlot("");
     try {
-      const params = new URLSearchParams({ date });
-      if (address.trim()) params.set("address", address.trim());
+      const params = new URLSearchParams({ date, job_duration_mins: String(jobDurationMins) });
+      if (addressDetails.formatted_address.trim()) params.set("address", addressDetails.formatted_address.trim());
       const res = await fetch(`/api/slots?${params}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
       if (!res.ok) { setError("Failed to load available slots."); return; }
@@ -179,7 +186,7 @@ function BookingFlow() {
     } finally {
       if (!controller.signal.aborted) setLoadingSlots(false);
     }
-  }, [address]);
+  }, [addressDetails.formatted_address, jobDurationMins]);
 
   /* lock countdown timer */
   useEffect(() => {
@@ -280,7 +287,7 @@ function BookingFlow() {
     setError("");
 
     const slotStart = `${selectedDate}T${selectedSlot}:00+04:00`;
-    const slotEnd = new Date(new Date(slotStart).getTime() + plan.duration * 60 * 1000).toISOString();
+    const slotEnd = new Date(new Date(slotStart).getTime() + jobDurationMins * 60 * 1000).toISOString();
 
     try {
       const res = await fetch("/api/checkout", {
@@ -288,7 +295,9 @@ function BookingFlow() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customer_name: name, customer_email: email, customer_phone: phone,
-          address, property_type: propertyType, bedrooms, thermostats, ducts: thermostats,
+          address: addressDetails.formatted_address,
+          address_details: addressDetails,
+          property_type: propertyType, bedrooms, thermostats, ducts: thermostats,
           plan: planKey, slot_start: slotStart, slot_end: slotEnd, session_id: sessionId,
         }),
       });
@@ -305,7 +314,7 @@ function BookingFlow() {
   const detailsValid = !!(
     name.trim() && email.trim() &&
     /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()) &&
-    phone.trim() && address.trim() && thermostats >= 1
+    phone.trim() && addressDetails.formatted_address.trim() && thermostats >= 1
   );
 
   const bedroomLabel = propertyType === "office" ? "N/A" : bedrooms === 0 ? "Studio" : `${bedrooms} bedroom${bedrooms > 1 ? "s" : ""}`;
@@ -350,7 +359,7 @@ function BookingFlow() {
           name={name} setName={setName}
           email={email} setEmail={setEmail}
           phone={phone} setPhone={setPhone}
-          address={address} setAddress={setAddress}
+          addressDetails={addressDetails} setAddressDetails={setAddressDetails}
           propertyType={propertyType} setPropertyType={setPropertyType}
           bedrooms={bedrooms} setBedrooms={setBedrooms}
           thermostats={thermostats} setThermostats={setThermostats}
@@ -362,6 +371,7 @@ function BookingFlow() {
       {step === "calendar" && (
         <CalendarStep
           plan={plan}
+          jobDurationMins={jobDurationMins}
           viewMonth={viewMonth} viewYear={viewYear}
           setViewMonth={setViewMonth} setViewYear={setViewYear}
           selectedDate={selectedDate} setSelectedDate={setSelectedDate}
@@ -376,7 +386,7 @@ function BookingFlow() {
       {step === "checkout" && (
         <CheckoutStep
           plan={plan}
-          name={name} email={email} phone={phone} address={address}
+          name={name} email={email} phone={phone} address={addressDetails.formatted_address}
           propertyLabel={propertyLabel} bedroomLabel={bedroomLabel}
           thermostats={thermostats}
           selectedDate={selectedDate} selectedSlot={selectedSlot}

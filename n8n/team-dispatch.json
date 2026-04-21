@@ -1,0 +1,85 @@
+{
+  "name": "Ductly — Team Dispatch",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "team-dispatch",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Team Dispatch",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "team-dispatch"
+    },
+    {
+      "parameters": {
+        "url": "https://waba.360dialog.io/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "D360-API-KEY",
+              "value": "={{ $env.WABA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.team_whatsapp.replace(/[^0-9]/g, '') }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"team_dispatch\",\n    \"language\": { \"code\": \"en\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": \"{{ $json.team_name }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.slot_start }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.customer_name }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.address }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.building_name || '' }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.flat_number || '' }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.additional_directions || 'None' }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.plan }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.customer_phone }}\" }\n        ]\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "send-whatsapp-team",
+      "name": "WhatsApp: Dispatch Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "dispatch@ductly.ae",
+        "toEmail": "admin@ductly.ae",
+        "subject": "New Job Assigned — {{ $json.team_name }} — {{ $json.slot_start }}",
+        "emailType": "html",
+        "html": "<!DOCTYPE html>\n<html>\n<body style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px;\">\n<h2 style=\"color: #3d3d3d;\">Team Dispatched</h2>\n<table style=\"font-size: 14px; border-collapse: collapse;\">\n<tr><td style=\"color: #999; padding: 6px 16px 6px 0;\">Team</td><td style=\"font-weight: 500;\">{{ $json.team_name }}</td></tr>\n<tr><td style=\"color: #999; padding: 6px 16px 6px 0;\">Date & Time</td><td style=\"font-weight: 500;\">{{ $json.slot_start }}</td></tr>\n<tr><td style=\"color: #999; padding: 6px 16px 6px 0;\">Customer</td><td style=\"font-weight: 500;\">{{ $json.customer_name }}</td></tr>\n<tr><td style=\"color: #999; padding: 6px 16px 6px 0;\">Phone</td><td style=\"font-weight: 500;\">{{ $json.customer_phone }}</td></tr>\n<tr><td style=\"color: #999; padding: 6px 16px 6px 0;\">Address</td><td style=\"font-weight: 500;\">{{ $json.address }}</td></tr>\n<tr><td style=\"color: #999; padding: 6px 16px 6px 0;\">Building</td><td style=\"font-weight: 500;\">{{ $json.building_name || '-' }}</td></tr>\n<tr><td style=\"color: #999; padding: 6px 16px 6px 0;\">Flat/Unit</td><td style=\"font-weight: 500;\">{{ $json.flat_number || '-' }}</td></tr>\n<tr><td style=\"color: #999; padding: 6px 16px 6px 0;\">Floor</td><td style=\"font-weight: 500;\">{{ $json.floor || '-' }}</td></tr>\n<tr><td style=\"color: #999; padding: 6px 16px 6px 0;\">Directions</td><td style=\"font-weight: 500;\">{{ $json.additional_directions || 'None' }}</td></tr>\n<tr><td style=\"color: #999; padding: 6px 16px 6px 0;\">Plan</td><td style=\"font-weight: 500;\">{{ $json.plan }} — AED {{ $json.price_aed }}</td></tr>\n</table>\n</body>\n</html>",
+        "options": {}
+      },
+      "id": "email-admin-dispatch",
+      "name": "Email: Admin Dispatch Log",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [500, 420],
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURE_ME",
+          "name": "SMTP — configure in n8n credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: Team Dispatch": {
+      "main": [
+        [
+          { "node": "WhatsApp: Dispatch Team", "type": "main", "index": 0 },
+          { "node": "Email: Admin Dispatch Log", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "ductly" },
+    { "name": "dispatch" },
+    { "name": "team" }
+  ],
+  "pinData": {},
+  "versionId": "1"
+}

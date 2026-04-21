@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 
 interface Booking {
   id: string;
@@ -58,6 +59,7 @@ const INPUT =
   "rounded-[10px] border-2 border-[rgb(230,230,230)] bg-white px-3.5 py-2 text-[13px] text-[rgb(61,61,61)] focus:border-[rgb(147,216,216)] focus:outline-none transition-colors";
 
 export default function BookingsPage() {
+  const router = useRouter();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -150,15 +152,42 @@ export default function BookingsPage() {
             Clear filters
           </button>
         )}
-        <span
-          className="ml-auto text-[13px]"
-          style={{
-            fontFamily: "var(--font-body)",
-            color: "rgb(160,165,175)",
-          }}
-        >
-          {total} booking{total !== 1 ? "s" : ""}
-        </span>
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/admin/bookings/create")}
+            className="px-4 py-2 rounded-full text-[13px] font-medium text-white"
+            style={{
+              fontFamily: "var(--font-cta)",
+              background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))",
+            }}
+          >
+            + New Booking
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              window.open("/api/admin/export?type=bookings", "_blank");
+            }}
+            className="px-3.5 py-2 rounded-[10px] border-2 text-[12px] font-medium hover:bg-[rgb(247,248,250)] transition-colors"
+            style={{
+              fontFamily: "var(--font-cta)",
+              borderColor: "rgb(230,230,230)",
+              color: "rgb(100,105,115)",
+            }}
+          >
+            Export CSV
+          </button>
+          <span
+            className="text-[13px]"
+            style={{
+              fontFamily: "var(--font-body)",
+              color: "rgb(160,165,175)",
+            }}
+          >
+            {total} booking{total !== 1 ? "s" : ""}
+          </span>
+        </div>
       </div>
 
       {/* Table */}
@@ -166,7 +195,7 @@ export default function BookingsPage() {
         <table className="w-full text-[13px]">
           <thead>
             <tr style={{ background: "rgb(247,248,250)" }}>
-              {["Time", "Address", "Status", "Team"].map((h) => (
+              {["Time", "Address", "Status", "Team", ""].map((h) => (
                 <th
                   key={h}
                   className="px-5 py-3 text-left font-medium border-b"
@@ -184,7 +213,7 @@ export default function BookingsPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4} className="px-5 py-12 text-center">
+                <td colSpan={5} className="px-5 py-12 text-center">
                   <div className="flex justify-center">
                     <div className="w-6 h-6 rounded-full border-[3px] border-[rgb(238,240,244)] border-t-[rgb(147,216,216)] animate-spin" />
                   </div>
@@ -193,7 +222,7 @@ export default function BookingsPage() {
             ) : bookings.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={5}
                   className="px-5 py-12 text-center text-[14px]"
                   style={{
                     fontFamily: "var(--font-body)",
@@ -207,11 +236,12 @@ export default function BookingsPage() {
               bookings.map((b, i) => (
                 <tr
                   key={b.id}
-                  className="transition-colors"
+                  className="transition-colors cursor-pointer"
                   style={{
                     borderTop:
                       i > 0 ? "1px solid rgb(245,246,248)" : undefined,
                   }}
+                  onClick={() => router.push(`/admin/bookings/${b.id}`)}
                   onMouseEnter={(e) =>
                     (e.currentTarget.style.background = "rgb(250,251,252)")
                   }
@@ -259,6 +289,31 @@ export default function BookingsPage() {
                     }}
                   >
                     {b.team_id ? b.team_id.slice(0, 8) : "Unassigned"}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {b.status === "confirmed" && (
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm("Cancel this booking and issue a refund?")) return;
+                          await fetch(`/api/admin/bookings/${b.id}/cancel`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ reason: "Cancelled by admin", issue_refund: true }),
+                          });
+                          fetchBookings();
+                        }}
+                        className="text-[12px] font-medium px-3 py-1.5 rounded-full hover:opacity-80 transition-opacity"
+                        style={{
+                          fontFamily: "var(--font-cta)",
+                          color: "rgb(239,68,68)",
+                          background: "rgba(239,68,68,0.08)",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))

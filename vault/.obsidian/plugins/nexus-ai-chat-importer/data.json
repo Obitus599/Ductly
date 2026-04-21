@@ -1,0 +1,32 @@
+{
+  "settings": {
+    "conversationFolder": "Nexus/Conversations",
+    "reportFolder": "Nexus/Reports",
+    "attachmentFolder": "Nexus/Attachments",
+    "addDatePrefix": false,
+    "dateFormat": "YYYY-MM-DD",
+    "useCustomMessageTimestampFormat": false,
+    "messageTimestampFormat": "locale",
+    "lastConversationsPerPage": 50,
+    "hasShownUpgradeNotice": false,
+    "hasSeenClaude132UpgradeNotice": false,
+    "hasCompletedUpgrade": false,
+    "currentVersion": "1.5.7",
+    "previousVersion": "1.5.7"
+  },
+  "importedArchives": {},
+  "upgradeHistory": {
+    "completedUpgrades": {
+      "1_5_7": {
+        "version": "1.5.7",
+        "date": "2026-04-11T11:26:28.662Z",
+        "completed": true
+      }
+    },
+    "completedOperations": {}
+  },
+  "lastVersion": "1.5.7",
+  "hasCompletedUpgrade": true,
+  "upgradeDate": "2026-04-11T11:26:28.666Z",
+  "versionTrackingEnabled": true
+}

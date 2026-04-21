@@ -20,11 +20,12 @@ export async function middleware(request: NextRequest) {
     // Verify token is valid by checking with Supabase
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      if (supabaseUrl) {
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceKey) {
         const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
           headers: {
             Authorization: `Bearer ${token}`,
-            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            apikey: serviceKey,
           },
         });
 

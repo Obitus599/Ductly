@@ -3,11 +3,14 @@
  * Extracted from the slots API route for testability.
  */
 
-const DAY_START_HOUR = 8;
-const DAY_END_HOUR = 18;
+export const DAY_START_HOUR = 8;
+export const DAY_END_HOUR = 18;
 const SLOT_INCREMENT_MINS = 30;
 const MINIMUM_TRAVEL_BUFFER_MINS = 20;
-const UAE_OFFSET_HOURS = 4;
+/** UAE is UTC+4 year-round (no DST). Single source of truth for timezone offset. */
+export const UAE_OFFSET_HOURS = 4;
+/** Timezone offset string for date queries (e.g., "T00:00:00+04:00"). */
+export const UAE_TZ_SUFFIX = "+04:00";
 
 export interface TimeRange {
   startMins: number;

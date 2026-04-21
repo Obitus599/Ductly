@@ -1,0 +1,249 @@
+{
+  "name": "Ductly — Booking Reminders (24h + 1h)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "minutes", "minutesInterval": 30 }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH upcoming AS ( SELECT b.id AS booking_id, b.slot_start, b.slot_end, b.address, b.team_id, b.manage_token, b.reminder_24h_sent_at, b.reminder_1h_sent_at, c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email, t.name AS team_name, EXTRACT(EPOCH FROM (b.slot_start - NOW())) / 3600 AS hours_until FROM bookings b JOIN customers c ON c.id = b.customer_id LEFT JOIN teams t ON t.id = b.team_id WHERE b.status = 'confirmed' AND b.slot_start > NOW() AND b.slot_start < NOW() + INTERVAL '25 hours' ) SELECT * FROM upcoming WHERE (hours_until BETWEEN 23 AND 25 AND reminder_24h_sent_at IS NULL) OR (hours_until BETWEEN 0.5 AND 1.5 AND reminder_1h_sent_at IS NULL) ORDER BY slot_start ASC;",
+        "options": {}
+      },
+      "id": "query-upcoming",
+      "name": "Query Upcoming Bookings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 300],
+      "credentials": {
+        "postgres": {
+          "id": "CONFIGURE_ME",
+          "name": "Supabase Postgres — configure in n8n credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-24h",
+              "leftValue": "={{ $json.hours_until }}",
+              "rightValue": 25,
+              "operator": { "type": "number", "operation": "lte" }
+            },
+            {
+              "id": "is-24h-min",
+              "leftValue": "={{ $json.hours_until }}",
+              "rightValue": 23,
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-24h-window",
+      "name": "24h Window?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-1h",
+              "leftValue": "={{ $json.hours_until }}",
+              "rightValue": 1.5,
+              "operator": { "type": "number", "operation": "lte" }
+            },
+            {
+              "id": "is-1h-min",
+              "leftValue": "={{ $json.hours_until }}",
+              "rightValue": 0.5,
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-1h-window",
+      "name": "1h Window?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 440]
+    },
+    {
+      "parameters": {
+        "url": "https://waba.360dialog.io/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "D360-API-KEY", "value": "={{ $env.WABA_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.customer_phone.replace(/[^0-9]/g, '') }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"booking_reminder_24h\",\n    \"language\": { \"code\": \"en\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": \"{{ $json.customer_name }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.slot_start }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.address }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.team_name || 'Your assigned team' }}\" }\n        ]\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "whatsapp-24h",
+      "name": "WhatsApp: 24h Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 120]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@ductly.ae",
+        "toEmail": "={{ $json.customer_email }}",
+        "subject": "Reminder: Your Duct Cleaning is Tomorrow",
+        "emailType": "html",
+        "html": "<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"></head>\n<body style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7f8fa; padding: 40px 20px;\">\n<div style=\"max-width: 520px; margin: 0 auto; background: white; border-radius: 16px; border: 2px solid #eef0f4; padding: 40px;\">\n  <img src=\"https://ductly.ae/images/logo.png\" alt=\"DUCTly\" style=\"height: 36px; margin-bottom: 24px;\" />\n  <h1 style=\"font-size: 22px; color: #3d3d3d; margin: 0 0 8px;\">Your Appointment is Tomorrow</h1>\n  <p style=\"color: #a0a5af; font-size: 14px; margin: 0 0 24px;\">Just a friendly reminder about your duct cleaning appointment.</p>\n  <div style=\"background: #fcfcfc; border: 1px solid #f4f4f4; border-radius: 12px; padding: 20px; margin-bottom: 24px;\">\n    <table style=\"width: 100%; border-collapse: collapse; font-size: 14px;\">\n      <tr><td style=\"color: #999; padding: 6px 0;\">Date & Time</td><td style=\"color: #3d3d3d; text-align: right; padding: 6px 0; font-weight: 500;\">{{ $json.slot_start }}</td></tr>\n      <tr><td style=\"color: #999; padding: 6px 0;\">Address</td><td style=\"color: #3d3d3d; text-align: right; padding: 6px 0; font-weight: 500;\">{{ $json.address }}</td></tr>\n      <tr><td style=\"color: #999; padding: 6px 0;\">Team</td><td style=\"color: #3d3d3d; text-align: right; padding: 6px 0; font-weight: 500;\">{{ $json.team_name || 'TBD' }}</td></tr>\n    </table>\n  </div>\n  <p style=\"font-size: 13px; color: #a0a5af;\">Need to reschedule? Use the link below (at least 24 hours before your appointment).</p>\n  <a href=\"{{ $env.APP_URL }}/my-booking/{{ $json.manage_token }}\" style=\"display: inline-block; background: linear-gradient(135deg, #93d8d8, #95cf8c); color: white; text-decoration: none; padding: 12px 28px; border-radius: 40px; font-size: 14px; font-weight: 500; margin-top: 8px;\">Manage Booking</a>\n</div>\n</body>\n</html>",
+        "options": {}
+      },
+      "id": "email-24h",
+      "name": "Email: 24h Reminder",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [900, 280],
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURE_ME",
+          "name": "SMTP — configure in n8n credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://waba.360dialog.io/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "D360-API-KEY", "value": "={{ $env.WABA_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.customer_phone.replace(/[^0-9]/g, '') }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"booking_reminder_1h\",\n    \"language\": { \"code\": \"en\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": \"{{ $json.customer_name }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.slot_start }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.team_name || 'Your assigned team' }}\" }\n        ]\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "whatsapp-1h",
+      "name": "WhatsApp: 1h Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE bookings SET reminder_24h_sent_at = NOW() WHERE id = '{{ $json.booking_id }}';",
+        "options": {}
+      },
+      "id": "mark-24h-sent",
+      "name": "Mark 24h Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 200],
+      "credentials": {
+        "postgres": {
+          "id": "CONFIGURE_ME",
+          "name": "Supabase Postgres — configure in n8n credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE bookings SET reminder_1h_sent_at = NOW() WHERE id = '{{ $json.booking_id }}';",
+        "options": {}
+      },
+      "id": "mark-1h-sent",
+      "name": "Mark 1h Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 440],
+      "credentials": {
+        "postgres": {
+          "id": "CONFIGURE_ME",
+          "name": "Supabase Postgres — configure in n8n credentials"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "no-op-24h",
+      "name": "Skip 24h",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {},
+      "id": "no-op-1h",
+      "name": "Skip 1h",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 520]
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [
+        [{ "node": "Query Upcoming Bookings", "type": "main", "index": 0 }]
+      ]
+    },
+    "Query Upcoming Bookings": {
+      "main": [
+        [
+          { "node": "24h Window?", "type": "main", "index": 0 },
+          { "node": "1h Window?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "24h Window?": {
+      "main": [
+        [
+          { "node": "WhatsApp: 24h Reminder", "type": "main", "index": 0 },
+          { "node": "Email: 24h Reminder", "type": "main", "index": 0 },
+          { "node": "Mark 24h Sent", "type": "main", "index": 0 }
+        ],
+        [{ "node": "Skip 24h", "type": "main", "index": 0 }]
+      ]
+    },
+    "1h Window?": {
+      "main": [
+        [
+          { "node": "WhatsApp: 1h Reminder", "type": "main", "index": 0 },
+          { "node": "Mark 1h Sent", "type": "main", "index": 0 }
+        ],
+        [{ "node": "Skip 1h", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [
+    { "name": "ductly" },
+    { "name": "reminder" },
+    { "name": "scheduled" }
+  ],
+  "pinData": {},
+  "versionId": "1"
+}

@@ -2,11 +2,23 @@
 
 export type Step = "details" | "calendar" | "checkout";
 
-export const PLANS: Record<string, { name: string; rate: number; duration: number }> = {
-  essential: { name: "Essential", rate: 500, duration: 90 },
-  signature: { name: "Signature", rate: 750, duration: 90 },
-  elite: { name: "Elite", rate: 900, duration: 90 },
+export interface PlanConfig {
+  name: string;
+  rate: number;
+  setupMins: number;
+  perThermostatMins: number;
+}
+
+export const PLANS: Record<string, PlanConfig> = {
+  essential: { name: "Essential", rate: 500, setupMins: 45, perThermostatMins: 45 },
+  signature: { name: "Signature", rate: 750, setupMins: 80, perThermostatMins: 45 },
+  elite:     { name: "Elite",     rate: 900, setupMins: 80, perThermostatMins: 60 },
 };
+
+/** Calculate total job duration in minutes for a given plan and thermostat count. */
+export function calcJobDuration(plan: PlanConfig, thermostats: number): number {
+  return plan.setupMins + plan.perThermostatMins * Math.max(1, thermostats);
+}
 
 export interface SlotResponse {
   date: string;

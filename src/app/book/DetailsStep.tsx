@@ -1,6 +1,7 @@
 "use client";
 
 import { CARD, CTA, INPUT, LABEL } from "./shared";
+import AddressPicker, { type AddressDetails } from "./AddressPicker";
 
 interface DetailsStepProps {
   name: string;
@@ -9,8 +10,8 @@ interface DetailsStepProps {
   setEmail: (v: string) => void;
   phone: string;
   setPhone: (v: string) => void;
-  address: string;
-  setAddress: (v: string) => void;
+  addressDetails: AddressDetails;
+  setAddressDetails: (v: AddressDetails) => void;
   propertyType: "villa" | "apartment" | "office";
   setPropertyType: (v: "villa" | "apartment" | "office") => void;
   bedrooms: number;
@@ -23,7 +24,7 @@ interface DetailsStepProps {
 
 export default function DetailsStep({
   name, setName, email, setEmail, phone, setPhone,
-  address, setAddress, propertyType, setPropertyType,
+  addressDetails, setAddressDetails, propertyType, setPropertyType,
   bedrooms, setBedrooms, thermostats, setThermostats,
   onContinue, valid,
 }: DetailsStepProps) {
@@ -76,18 +77,8 @@ export default function DetailsStep({
           </div>
         </div>
 
-        {/* Address */}
-        <div>
-          <label htmlFor="book-address" className={LABEL} style={{ fontFamily: "var(--font-body)" }}>
-            Service Address
-          </label>
-          <input
-            id="book-address" type="text" value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="Villa 42, Street 12, Al Barsha 2, Dubai"
-            className={INPUT} style={{ fontFamily: "var(--font-body)" }}
-          />
-        </div>
+        {/* Address — map picker + structured fields */}
+        <AddressPicker value={addressDetails} onChange={setAddressDetails} />
 
         {/* Property Details */}
         <div className="border-t-2 border-[rgb(244,244,244)] pt-6 mt-1">

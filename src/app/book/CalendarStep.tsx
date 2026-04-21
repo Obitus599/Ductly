@@ -1,9 +1,10 @@
 "use client";
 
-import { CARD, formatSlot, formatDate } from "./shared";
+import { CARD, formatSlot, formatDate, type PlanConfig } from "./shared";
 
 interface CalendarStepProps {
-  plan: { name: string; rate: number; duration: number };
+  plan: PlanConfig;
+  jobDurationMins: number;
   viewMonth: number;
   viewYear: number;
   setViewMonth: (v: number) => void;
@@ -21,7 +22,7 @@ interface CalendarStepProps {
 }
 
 export default function CalendarStep({
-  plan, viewMonth, viewYear, setViewMonth, setViewYear,
+  plan, jobDurationMins, viewMonth, viewYear, setViewMonth, setViewYear,
   selectedDate, setSelectedDate, minDate, slots, totalTeams,
   loadingSlots, fetchSlots, selectSlot, lockingSlot, onBack,
 }: CalendarStepProps) {
@@ -43,7 +44,7 @@ export default function CalendarStep({
             className="text-[13px] mt-0.5"
             style={{ fontFamily: "var(--font-body)", color: "rgb(170,175,185)" }}
           >
-            {plan.name} Plan &middot; {plan.duration} min service
+            {plan.name} Plan &middot; {jobDurationMins} min service
           </p>
         </div>
         <button

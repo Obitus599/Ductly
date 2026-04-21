@@ -5,14 +5,12 @@ import { checkRateLimit } from "@/lib/rate-limit";
 
 /**
  * Pricing: plan tier rate × number of thermostats.
- *   Essential: 500 AED/thermostat
- *   Signature: 750 AED/thermostat
- *   Elite:     900 AED/thermostat
+ * Duration: setup time + per-thermostat work time.
  */
-const PLAN_RATES: Record<string, number> = {
-  essential: 500,
-  signature: 750,
-  elite: 900,
+const PLAN_CONFIG: Record<string, { rate: number; setupMins: number; perThermostatMins: number }> = {
+  essential: { rate: 500, setupMins: 45, perThermostatMins: 45 },
+  signature: { rate: 750, setupMins: 80, perThermostatMins: 45 },
+  elite:     { rate: 900, setupMins: 80, perThermostatMins: 60 },
 };
 
 /**
@@ -38,13 +36,13 @@ export async function POST(request: NextRequest) {
       customer_email,
       customer_phone,
       address,
+      address_details,
       property_type,
       bedrooms,
       thermostats,
       ducts,
       plan,
       slot_start,
-      slot_end,
       session_id,
     } = body;
 
@@ -60,7 +58,6 @@ export async function POST(request: NextRequest) {
       ducts === undefined ||
       !plan ||
       !slot_start ||
-      !slot_end ||
       !session_id
     ) {
       return NextResponse.json(
@@ -111,7 +108,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate plan
-    if (!PLAN_RATES[plan]) {
+    if (!PLAN_CONFIG[plan]) {
       return NextResponse.json(
         { error: "Invalid plan. Must be essential, signature, or elite." },
         { status: 400 }
@@ -121,6 +118,11 @@ export async function POST(request: NextRequest) {
     const thermostatCount = Math.max(1, Math.min(50, Math.floor(Number(thermostats) || 1)));
     const ductCount = Math.max(1, Math.min(200, Math.floor(Number(ducts) || 1)));
     const planKey = plan;
+
+    // Recalculate job duration & slot_end server-side (don't trust client)
+    const planCfg = PLAN_CONFIG[planKey];
+    const jobDurationMins = planCfg.setupMins + planCfg.perThermostatMins * thermostatCount;
+    const computedSlotEnd = new Date(new Date(slot_start).getTime() + jobDurationMins * 60 * 1000).toISOString();
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     if (!appUrl) {
@@ -132,7 +134,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate price: tier rate × thermostats
-    const rate = PLAN_RATES[planKey];
+    const rate = planCfg.rate;
     const priceAED = rate * thermostatCount;
     const priceInFils = priceAED * 100;
 
@@ -182,8 +184,9 @@ export async function POST(request: NextRequest) {
       .insert({
         customer_id: customer.id,
         slot_start,
-        slot_end,
+        slot_end: computedSlotEnd,
         address,
+        address_details: address_details || null,
         status: "pending",
       } as never)
       .select("id")
@@ -220,6 +223,8 @@ export async function POST(request: NextRequest) {
           session_id,
           slot_start,
           address,
+          building_name: address_details?.building_name || "",
+          flat_number: address_details?.flat_number || "",
           property_type,
           bedrooms: String(bedrooms),
           thermostats: String(thermostatCount),

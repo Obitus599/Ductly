@@ -11,7 +11,7 @@ const spring = { type: "spring" as const, damping: 58, stiffness: 400, mass: 1 }
 
 function FadeUp({ children, delay = 0, className = "" }: { children: ReactNode; delay?: number; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-60px" });
+  const inView = useInView(ref, { once: true, amount: 0.1 });
   return (
     <motion.div ref={ref} initial={{ opacity: 0, y: 20 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ ...spring, delay }} className={className}>
       {children}
@@ -21,7 +21,7 @@ function FadeUp({ children, delay = 0, className = "" }: { children: ReactNode; 
 
 function ScaleIn({ children, delay = 0, className = "" }: { children: ReactNode; delay?: number; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-60px" });
+  const inView = useInView(ref, { once: true, amount: 0.1 });
   return (
     <motion.div ref={ref} initial={{ opacity: 0, scale: 0.8 }} animate={inView ? { opacity: 1, scale: 1 } : {}} transition={{ ...spring, delay }} className={className}>
       {children}

@@ -3,7 +3,7 @@
 import { CARD, CTA, Row, formatSlot, formatDate } from "./shared";
 
 interface CheckoutStepProps {
-  plan: { name: string; rate: number; duration: number };
+  plan: { name: string; rate: number };
   name: string;
   email: string;
   phone: string;
