@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
   const authError = requireAdmin(request);
   if (authError) return authError;
 
-  let body: Record<string, unknown>;
+  // eslint-disable-next-line
+  let body: any;
   try {
     body = await request.json();
   } catch {
