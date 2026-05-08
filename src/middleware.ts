@@ -13,6 +13,10 @@ export async function middleware(request: NextRequest) {
     const token = request.cookies.get("admin-token")?.value;
 
     if (!token) {
+      // In development without ADMIN_API_KEY, skip auth
+      if (!process.env.ADMIN_API_KEY && process.env.NODE_ENV !== "production") {
+        return await updateSession(request);
+      }
       const loginUrl = new URL("/admin/login", request.url);
       return NextResponse.redirect(loginUrl);
     }

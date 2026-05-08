@@ -42,9 +42,9 @@ export async function POST(
   // 1. Fetch the booking
   const { data: booking, error: fetchError } = await supabase
     .from("bookings")
-    .select("id, status, slot_start, payment_intent_id, team_id")
+    .select("id, status, slot_start, payment_intent_id, team_id, customer_id")
     .eq("manage_token", token)
-    .returns<{ id: string; status: string; slot_start: string; payment_intent_id: string | null; team_id: string | null }[]>()
+    .returns<{ id: string; status: string; slot_start: string; payment_intent_id: string | null; team_id: string | null; customer_id: string }[]>()
     .single();
 
   if (fetchError || !booking) {
@@ -113,6 +113,33 @@ export async function POST(
       .from("slot_locks")
       .delete()
       .eq("booking_id", booking.id);
+  }
+
+  // 7. Trigger n8n cancellation notification
+  const n8nCancelUrl = process.env.N8N_WEBHOOK_BOOKING_CANCELLED;
+  if (n8nCancelUrl) {
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("name, phone, email")
+      .eq("id", booking.customer_id)
+      .returns<{ name: string; phone: string; email: string }[]>()
+      .single();
+
+    fetch(n8nCancelUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: "booking_cancelled",
+        booking_id: booking.id,
+        customer_name: customer?.name || "",
+        customer_phone: customer?.phone || "",
+        customer_email: customer?.email || "",
+        slot_start: booking.slot_start,
+        reason: reason || "No reason provided",
+        refund_status: refundStatus,
+        cancelled_by: "customer",
+      }),
+    }).catch((err) => console.error("n8n cancel webhook failed:", err));
   }
 
   return NextResponse.json({
