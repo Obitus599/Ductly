@@ -39,9 +39,9 @@ export function getTimeBucket(date: Date): string {
 async function geocodeAddress(
   address: string
 ): Promise<{ lat: number; lng: number } | null> {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_SERVER_KEY || process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
-    console.error("GOOGLE_MAPS_API_KEY is not configured");
+    console.error("GOOGLE_MAPS_SERVER_KEY (or GOOGLE_MAPS_API_KEY) is not configured");
     return null;
   }
 
@@ -75,7 +75,7 @@ async function fetchDistanceMatrix(
   destLng: number,
   departureTime: Date
 ): Promise<number | null> {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_SERVER_KEY || process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) return null;
 
   const departureSecs = Math.floor(departureTime.getTime() / 1000);

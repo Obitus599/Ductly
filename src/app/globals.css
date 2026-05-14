@@ -18,7 +18,7 @@
   --font-body: 'Switzer', 'Switzer Placeholder', sans-serif;
   --font-cta: 'Inter Tight', 'Inter Tight Placeholder', sans-serif;
   --font-stat: 'Inter', 'Inter Placeholder', sans-serif;
-  --font-badge: 'Geist', 'Geist Placeholder', sans-serif;
+  --font-badge: var(--font-geist-sans), 'Geist Placeholder', sans-serif;
 }
 
 /* Marquee */

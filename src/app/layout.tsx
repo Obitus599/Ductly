@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -35,17 +36,12 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://api.fontshare.com" />
-        <link rel="preconnect" href="https://cdn.jsdelivr.net" />
         <link
           href="https://fonts.googleapis.com/css2?family=Questrial&family=Inter+Tight:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
         <link
           href="https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700&display=swap"
-          rel="stylesheet"
-        />
-        <link
-          href="https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/font/sans/style.min.css"
           rel="stylesheet"
         />
         <script
@@ -64,7 +60,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className={`${GeistSans.variable} antialiased`}>{children}</body>
     </html>
   );
 }

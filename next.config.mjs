@@ -34,8 +34,8 @@ const nextConfig = {
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://maps.googleapis.com",
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com https://cdn.jsdelivr.net https://cdn.fontshare.com",
-              "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net https://api.fontshare.com https://cdn.fontshare.com",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com https://cdn.fontshare.com",
+              "font-src 'self' https://fonts.gstatic.com https://api.fontshare.com https://cdn.fontshare.com",
               "img-src 'self' data: blob: https://maps.googleapis.com https://*.googleapis.com https://maps.gstatic.com",
               "frame-src https://js.stripe.com https://www.google.com",
               "connect-src 'self' https://*.supabase.co https://api.stripe.com https://maps.googleapis.com https://*.googleapis.com",

@@ -53,7 +53,7 @@ function loadGoogleMaps(): Promise<void> {
 
   googlePromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&region=AE`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&region=AE&loading=async`;
     script.async = true;
     script.defer = true;
     script.onload = () => resolve();
