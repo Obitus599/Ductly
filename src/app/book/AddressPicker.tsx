@@ -42,7 +42,7 @@ let googlePromise: Promise<void> | null = null;
 
 function loadGoogleMaps(): Promise<void> {
   if (typeof window === "undefined") return Promise.reject();
-  if (window.google?.maps?.places) return Promise.resolve();
+  if (window.google?.maps?.Map) return Promise.resolve();
   if (googlePromise) return googlePromise;
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -53,10 +53,16 @@ function loadGoogleMaps(): Promise<void> {
 
   googlePromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&region=AE&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&region=AE`;
     script.async = true;
     script.defer = true;
-    script.onload = () => resolve();
+    script.onload = () => {
+      if (window.google?.maps?.Map) {
+        resolve();
+      } else {
+        reject("Google Maps API key is restricted or blocked — check GCP referrer settings");
+      }
+    };
     script.onerror = () => reject("Failed to load Google Maps");
     document.head.appendChild(script);
   });
@@ -140,6 +146,7 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
     if (!mapsLoaded || !mapRef.current || !inputRef.current) return;
     if (mapInstanceRef.current) return; // already initialized
 
+    try {
     const center = value.lat && value.lng
       ? { lat: value.lat, lng: value.lng }
       : DUBAI_CENTER;
@@ -228,6 +235,9 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
     mapInstanceRef.current = map;
     markerRef.current = marker;
     autocompleteRef.current = autocomplete;
+    } catch {
+      setNoApiKey(true);
+    }
   }, [mapsLoaded, reverseGeocode, value.lat, value.lng]);
 
   /* ── Field change handler ── */

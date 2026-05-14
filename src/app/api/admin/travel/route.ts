@@ -108,10 +108,10 @@ export async function POST(request: NextRequest) {
   if (authError) return authError;
 
   // Read API key per-request (supports key rotation without restart)
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_SERVER_KEY || process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "GOOGLE_MAPS_API_KEY is not configured." },
+      { error: "GOOGLE_MAPS_SERVER_KEY (or GOOGLE_MAPS_API_KEY) is not configured." },
       { status: 500 }
     );
   }

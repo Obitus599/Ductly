@@ -307,7 +307,7 @@ export async function GET(request: NextRequest) {
     // ── 6. Pass 2: Travel-aware filter (or flat buffer fallback) ──────────
 
     const referenceDate = new Date(date + "T12:00:00+04:00");
-    const afterPass2 = address && process.env.GOOGLE_MAPS_API_KEY
+    const afterPass2 = address && (process.env.GOOGLE_MAPS_SERVER_KEY || process.env.GOOGLE_MAPS_API_KEY)
       ? await pass2TravelFilter(
           afterPass1, jobDurationMins, bookings || [], locks || [],
           address, activeTeamIds, referenceDate
