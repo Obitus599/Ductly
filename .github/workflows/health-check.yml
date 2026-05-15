@@ -1,0 +1,133 @@
+name: Health Check
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://test.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+  SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+  STRIPE_SECRET_KEY: sk_test_dummy
+  STRIPE_WEBHOOK_SECRET: whsec_test_dummy
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+jobs:
+  code-health:
+    name: Code Health (main branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm run test:coverage
+      - name: Build
+        run: npm run build
+
+  e2e-health:
+    name: E2E (Playwright on main)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run test:e2e
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-health-report
+          path: test-results/
+
+  staging-uptime:
+    name: Staging Uptime Probe
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit staging /api/health
+        id: probe
+        run: |
+          response=$(curl -s -o /tmp/body -w "%{http_code}" --max-time 15 \
+            https://staging.ductly.ae/api/health || echo "000")
+          echo "status=$response" >> "$GITHUB_OUTPUT"
+          echo "::group::Response body"
+          cat /tmp/body || true
+          echo
+          echo "::endgroup::"
+          if [ "$response" != "200" ]; then
+            echo "::error::staging.ductly.ae/api/health returned HTTP $response"
+            exit 1
+          fi
+      - name: Hit staging landing
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            https://staging.ductly.ae/ || echo "000")
+          if [ "$response" != "200" ]; then
+            echo "::error::staging.ductly.ae/ returned HTTP $response"
+            exit 1
+          fi
+
+  notify-on-failure:
+    name: Open issue on failure
+    needs: [code-health, e2e-health, staging-uptime]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Create or update health-check issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Nightly health check failed (${new Date().toISOString().slice(0,10)})`;
+            const body = `Nightly health check failed on \`main\`.
+
+            **Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+
+            Jobs to check:
+            - Code Health (lint / typecheck / unit / build)
+            - E2E (Playwright)
+            - Staging Uptime Probe (staging.ductly.ae)
+
+            One or more of these failed. Open the run above for details.`;
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'health-check',
+            });
+
+            if (existing.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.data[0].number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['health-check', 'bug'],
+              });
+            }
