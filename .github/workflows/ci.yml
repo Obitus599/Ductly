@@ -81,3 +81,30 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+
+  deploy:
+    name: Deploy to Production
+    needs: [lint-typecheck, unit-integration, e2e, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: SSH and deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+            export NVM_DIR=/var/www/vhosts/ductly.ae/.nvm
+            . $NVM_DIR/nvm.sh
+            cd httpdocs
+            git fetch origin main
+            git reset --hard origin/main
+            npm ci
+            npx next build
+            pm2 restart ductly

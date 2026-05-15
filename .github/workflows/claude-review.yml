@@ -1,0 +1,101 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://test.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+  SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+  STRIPE_SECRET_KEY: sk_test_dummy
+  STRIPE_WEBHOOK_SECRET: whsec_test_dummy
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+jobs:
+  review:
+    name: Claude Code Review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run typecheck (collected for Claude)
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck 2>&1 | tee typecheck.log
+
+      - name: Run unit tests (collected for Claude)
+        id: tests
+        continue-on-error: true
+        run: npm test 2>&1 | tee tests.log
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are reviewing a pull request against the Ductly codebase
+            (Next.js 14 + TypeScript + Supabase + Stripe + n8n). Hold the
+            diff to a production-ready bar.
+
+            For this PR, do the following:
+
+            1. Read typecheck.log and tests.log from the workspace. Report
+               any failures with file:line references. If anything failed,
+               flag the PR as not-ready-to-merge in your summary.
+
+            2. Review the actual code diff for:
+               - Security: secret leaks (Supabase service-role keys, Stripe
+                 keys, Meta tokens), SSRF, SQL injection, XSS, missing
+                 authn/authz on admin routes, unvalidated user input.
+               - Correctness: edge cases, off-by-one, race conditions
+                 (especially around booking_locks, slot_locks,
+                 scheduling-agent), incorrect async handling, missing
+                 awaits.
+               - Type safety: `any` usage, unsafe casts, missing return types
+                 on exported functions.
+               - Error handling: unhandled promise rejections, missing
+                 try/catch around Supabase/Stripe/n8n calls, silent
+                 failures.
+               - Performance: N+1 queries, unnecessary re-renders, missing
+                 indexes implied by query patterns, large bundle additions.
+               - Tests: are new code paths covered? Are tests meaningful
+                 (not just "function exists")?
+               - Accessibility: missing aria labels, keyboard navigation
+                 issues, color-contrast on new UI.
+               - Conventions: matches existing patterns in the codebase
+                 (file names, import order, component structure).
+
+            3. Comment inline on specific lines for concrete issues. Use
+               GitHub's suggestion blocks where you can propose an exact
+               fix.
+
+            4. End with a summary comment containing:
+               - Verdict: APPROVE / REQUEST CHANGES / COMMENT
+               - Blockers (must fix before merge)
+               - Suggestions (nice to fix)
+               - Test/typecheck status from step 1
+
+            Be specific. Cite file paths and line numbers. Don't repeat
+            generic best-practice advice that doesn't apply to the diff.
+          claude_args: |
+            --model claude-opus-4-7
+            --max-turns 20
