@@ -17,6 +17,9 @@ env:
   STRIPE_SECRET_KEY: sk_test_dummy
   STRIPE_WEBHOOK_SECRET: whsec_test_dummy
   NEXT_PUBLIC_APP_URL: http://localhost:3000
+  # Required so middleware enters the auth-required branch (otherwise
+  # it skips auth as a dev convenience — see src/middleware.ts).
+  ADMIN_API_KEY: test-admin-key
 
 jobs:
   lint-typecheck:

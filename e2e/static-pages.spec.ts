@@ -27,9 +27,12 @@ test.describe("Static pages", () => {
 });
 
 test.describe("Health endpoint", () => {
-  test("GET /api/health returns JSON", async ({ request }) => {
+  test("GET /api/health returns well-formed JSON", async ({ request }) => {
     const res = await request.get("/api/health");
-    expect(res.status()).toBe(200);
+    // 200 healthy or 503 degraded — both are well-formed responses.
+    // In CI with dummy Supabase creds the dependency check is expected
+    // to fail, returning 503.
+    expect([200, 503]).toContain(res.status());
     const body = await res.json();
     expect(body.status).toBeDefined();
     expect(body.checks).toBeDefined();
