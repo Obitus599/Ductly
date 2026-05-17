@@ -163,7 +163,7 @@ If you need to reconnect SSH from a new machine:
 
 - [ ] Create admin user in Supabase Dashboard → Authentication → Users
 - [ ] Update Stripe webhook URL to `https://ductly.ae/api/webhooks/stripe` (when going live)
-- [ ] Run SQL migrations in Supabase SQL editor (`scripts/005_cancellation_reschedule.sql`, etc.)
+- [ ] Apply pending DB migrations via `supabase db push` (CLI must be linked — see `supabase/migrations/`)
 - [ ] Set up pm2 auto-restart: `pm2 startup` on the server
 - [x] Set up n8n — running at `https://n8n.ductly.ae`
 - [ ] Configure n8n WhatsApp notification workflows

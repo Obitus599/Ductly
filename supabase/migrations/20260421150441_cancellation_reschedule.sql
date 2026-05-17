@@ -1,5 +1,4 @@
 -- Cancellation & rescheduling support.
--- Run this in the Supabase SQL Editor.
 
 -- Management token for customer self-service (no login required)
 ALTER TABLE bookings

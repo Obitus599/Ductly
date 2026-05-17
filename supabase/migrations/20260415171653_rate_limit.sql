@@ -1,5 +1,4 @@
 -- Rate limit table and atomic check function for serverless environments.
--- Run this in the Supabase SQL Editor.
 
 CREATE TABLE IF NOT EXISTS rate_limits (
   key TEXT NOT NULL,

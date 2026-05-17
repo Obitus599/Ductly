@@ -1,5 +1,4 @@
--- 007: Add notification tracking columns to prevent duplicate sends from n8n
--- Run this in Supabase SQL Editor before importing n8n workflows.
+-- Add notification tracking columns to prevent duplicate sends from n8n.
 
 -- Track when reminders were sent (prevents duplicate 24h/1h reminders)
 ALTER TABLE bookings

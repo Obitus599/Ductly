@@ -1,5 +1,4 @@
 -- Contact form submissions and newsletter subscribers.
--- Run this in the Supabase SQL Editor.
 
 CREATE TABLE IF NOT EXISTS contact_submissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

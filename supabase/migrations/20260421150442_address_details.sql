@@ -1,6 +1,6 @@
--- 006: Add structured address details to bookings
--- Stores building name, flat/unit, floor, directions, lat/lng, area, city
--- The existing `address` TEXT column remains as the geocodable formatted address
+-- Add structured address details to bookings.
+-- Stores building name, flat/unit, floor, directions, lat/lng, area, city.
+-- The existing `address` TEXT column remains as the geocodable formatted address.
 
 ALTER TABLE bookings
   ADD COLUMN IF NOT EXISTS address_details JSONB;

@@ -691,9 +691,9 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 ### Database Migrations Completed (Phase 4+)
 - [x] UNIQUE constraint on customers.email
 - [x] "payment_failed" added to bookings status CHECK constraint
-- [x] contact_submissions table (scripts/004_contact_newsletter.sql)
-- [x] newsletter_subscribers table (scripts/004_contact_newsletter.sql)
-- [x] rate_limits table (scripts/003_rate_limit.sql)
+- [x] contact_submissions table (supabase/migrations/20260415171654_contact_newsletter.sql)
+- [x] newsletter_subscribers table (supabase/migrations/20260415171654_contact_newsletter.sql)
+- [x] rate_limits table (supabase/migrations/20260415171653_rate_limit.sql)
 
 ---
 
