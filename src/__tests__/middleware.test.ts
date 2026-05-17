@@ -29,6 +29,9 @@ describe("middleware", () => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key";
+    // Without ADMIN_API_KEY set, middleware.ts:17 skips auth in non-prod
+    // (a dev convenience). Tests must simulate prod-like config.
+    process.env.ADMIN_API_KEY = "test-admin-key";
   });
 
   it("allows non-admin routes through without auth check", async () => {
