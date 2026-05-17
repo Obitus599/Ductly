@@ -30,9 +30,14 @@ CREATE TABLE customers (
   email TEXT NOT NULL,
   whatsapp_opt_in BOOLEAN NOT NULL DEFAULT false,
   last_booking TIMESTAMPTZ,
+  consent_given_at TIMESTAMPTZ,
+  consent_version TEXT,
+  deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_customers_deleted_at ON customers(deleted_at);
 
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 

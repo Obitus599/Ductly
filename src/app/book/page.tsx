@@ -7,6 +7,7 @@ import DetailsStep from "./DetailsStep";
 import CalendarStep from "./CalendarStep";
 import CheckoutStep from "./CheckoutStep";
 import { type AddressDetails, EMPTY_ADDRESS } from "./AddressPicker";
+import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
 
 /* ─── Step Indicator ────────────────────────────────────────────────── */
 
@@ -118,6 +119,7 @@ function BookingFlow() {
   const [lockingSlot, setLockingSlot] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [cancelled, setCancelled] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
 
   /* refs for async handlers */
   const abortRef = useRef<AbortController | null>(null);
@@ -299,6 +301,7 @@ function BookingFlow() {
           address_details: addressDetails,
           property_type: propertyType, bedrooms, thermostats, ducts: thermostats,
           plan: planKey, slot_start: slotStart, slot_end: slotEnd, session_id: sessionId,
+          consent_version: CURRENT_CONSENT_VERSION,
         }),
       });
       const data = await res.json();
@@ -392,6 +395,7 @@ function BookingFlow() {
           selectedDate={selectedDate} selectedSlot={selectedSlot}
           lockCountdown={lockCountdown} hasLock={!!lock}
           submitting={submitting}
+          consentChecked={consentChecked} setConsentChecked={setConsentChecked}
           onBack={() => { releaseLock(); setStep("calendar"); }}
           onCheckout={handleCheckout}
         />

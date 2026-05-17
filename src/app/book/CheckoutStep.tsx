@@ -16,6 +16,8 @@ interface CheckoutStepProps {
   lockCountdown: number;
   hasLock: boolean;
   submitting: boolean;
+  consentChecked: boolean;
+  setConsentChecked: (v: boolean) => void;
   onBack: () => void;
   onCheckout: () => void;
 }
@@ -23,7 +25,7 @@ interface CheckoutStepProps {
 export default function CheckoutStep({
   plan, name, email, phone, address, propertyLabel, bedroomLabel,
   thermostats, selectedDate, selectedSlot, lockCountdown, hasLock,
-  submitting, onBack, onCheckout,
+  submitting, consentChecked, setConsentChecked, onBack, onCheckout,
 }: CheckoutStepProps) {
   return (
     <div className="p-7 md:p-10" style={CARD}>
@@ -87,6 +89,30 @@ export default function CheckoutStep({
         </div>
       </div>
 
+      {/* PDPL consent (UAE Federal Decree-Law 45/2021) */}
+      <label
+        className="flex items-start gap-3 mb-5 cursor-pointer"
+        style={{ fontFamily: "var(--font-body)" }}
+      >
+        <input
+          type="checkbox"
+          checked={consentChecked}
+          onChange={(e) => setConsentChecked(e.target.checked)}
+          className="mt-1 w-4 h-4 accent-[rgb(149,207,140)] cursor-pointer"
+        />
+        <span className="text-[13px] leading-[1.55] text-[rgb(109,109,109)]">
+          I agree to Ductly&apos;s{" "}
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline text-[rgb(80,160,160)]">
+            Privacy Policy
+          </a>{" "}
+          and{" "}
+          <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline text-[rgb(80,160,160)]">
+            Terms
+          </a>
+          , and consent to the processing of my personal data as described.
+        </span>
+      </label>
+
       {/* Actions */}
       <div className="flex gap-3">
         <button
@@ -97,8 +123,8 @@ export default function CheckoutStep({
           Back
         </button>
         <button
-          type="button" disabled={submitting} onClick={onCheckout}
-          className="flex-1 px-6 py-4 text-[16px] text-white hover:brightness-110 transition-all duration-200 disabled:opacity-50"
+          type="button" disabled={submitting || !consentChecked} onClick={onCheckout}
+          className="flex-1 px-6 py-4 text-[16px] text-white hover:brightness-110 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           style={CTA}
         >
           {submitting ? "Redirecting to payment..." : "Proceed to Payment"}

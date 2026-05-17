@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin } from "@/lib/admin-auth";
 import { assignTeamToBooking } from "@/lib/scheduling-agent";
 import { UAE_TZ_SUFFIX } from "@/lib/slot-helpers";
+import { ADMIN_RECORDED_CONSENT_VERSION } from "@/lib/consent";
 
 /** Plan config — must match shared.tsx / checkout PLAN_CONFIG */
 const PLAN_CONFIG: Record<string, { rate: number; setupMins: number; perThermostatMins: number }> = {
@@ -129,10 +130,15 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 1. Upsert customer (email optional for phone-in)
-  const customerData: Record<string, string> = {
+  // 1. Upsert customer (email optional for phone-in).
+  // Admin-created bookings record verbal consent on the customer's
+  // behalf — see ADMIN_RECORDED_CONSENT_VERSION sentinel.
+  const customerData: Record<string, string | null> = {
     name: customer_name,
     phone: customer_phone,
+    consent_given_at: new Date().toISOString(),
+    consent_version: ADMIN_RECORDED_CONSENT_VERSION,
+    deleted_at: null,
   };
   if (customer_email) customerData.email = customer_email;
 

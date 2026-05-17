@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
 
 /**
  * Pricing: plan tier rate × number of thermostats.
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
       plan,
       slot_start,
       session_id,
+      consent_version,
     } = body;
 
     // Validate required fields
@@ -115,6 +117,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // PDPL: must have explicit consent matching the current policy version
+    if (consent_version !== CURRENT_CONSENT_VERSION) {
+      return NextResponse.json(
+        { error: "You must accept the current privacy policy to proceed." },
+        { status: 400 }
+      );
+    }
+
     const thermostatCount = Math.max(1, Math.min(50, Math.floor(Number(thermostats) || 1)));
     const ductCount = Math.max(1, Math.min(200, Math.floor(Number(ducts) || 1)));
     const planKey = plan;
@@ -155,7 +165,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Upsert customer
+    // 2. Upsert customer (refresh consent record on every booking)
     const { data: customer, error: customerError } = await supabaseAdmin
       .from("customers")
       .upsert(
@@ -163,6 +173,9 @@ export async function POST(request: NextRequest) {
           name: customer_name,
           email: customer_email,
           phone: customer_phone,
+          consent_given_at: new Date().toISOString(),
+          consent_version,
+          deleted_at: null,
         } as never,
         { onConflict: "email" }
       )

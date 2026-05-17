@@ -33,6 +33,7 @@ vi.mock("@/lib/rate-limit", () => ({
 }));
 
 import { POST } from "@/app/api/checkout/route";
+import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
 
 const VALID_BODY = {
   customer_name: "Alex Test",
@@ -47,6 +48,7 @@ const VALID_BODY = {
   slot_start: "2025-04-15T10:00:00+04:00",
   slot_end: "2025-04-15T11:30:00+04:00",
   session_id: "sess-abc-123",
+  consent_version: CURRENT_CONSENT_VERSION,
 };
 
 function makeRequest(body: Record<string, unknown>): NextRequest {
@@ -139,6 +141,20 @@ describe("POST /api/checkout", () => {
 
   it("returns 400 for name that is too long", async () => {
     const res = await POST(makeRequest({ ...VALID_BODY, customer_name: "A".repeat(201) }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when consent_version is missing (PDPL)", async () => {
+    const { consent_version: _omit, ...withoutConsent } = VALID_BODY;
+    void _omit;
+    const res = await POST(makeRequest(withoutConsent));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/privacy policy/i);
+  });
+
+  it("returns 400 when consent_version is stale (PDPL)", async () => {
+    const res = await POST(makeRequest({ ...VALID_BODY, consent_version: "2020-01-01" }));
     expect(res.status).toBe(400);
   });
 
