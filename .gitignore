@@ -42,3 +42,6 @@ Ductly Keys.md
 
 # claude local settings
 .claude/settings.local.json
+
+# supabase CLI link state (contains pooled connection string with DB password)
+/supabase/.temp/
