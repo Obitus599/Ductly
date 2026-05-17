@@ -19,7 +19,9 @@ export function getTimeBucket(date: Date): string {
   }).formatToParts(date);
 
   const weekday = dubaiParts.find((p) => p.type === "weekday")?.value?.toUpperCase().slice(0, 3) || "MON";
-  const hour = Number(dubaiParts.find((p) => p.type === "hour")?.value ?? 12);
+  // Node 20's older ICU returns "24" for midnight in `hour12: false` mode;
+  // Node 22+ correctly returns "0". `% 24` normalises either way.
+  const hour = Number(dubaiParts.find((p) => p.type === "hour")?.value ?? 12) % 24;
 
   // Map Intl weekday abbreviations to our DAY_ABBREVS
   const dayMap: Record<string, string> = {
