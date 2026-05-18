@@ -114,4 +114,8 @@ jobs:
             git reset --hard origin/main
             npm ci
             npx next build
-            pm2 restart ductly
+            # Plesk runs the app via Phusion Passenger (not pm2). Passenger
+            # reloads when tmp/restart.txt is touched. We restart pm2 too
+            # for any non-Passenger workers (e.g. n8n adjuncts).
+            mkdir -p tmp && touch tmp/restart.txt
+            pm2 restart ductly || true
