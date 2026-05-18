@@ -95,15 +95,38 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { messages?: { role: string; content: string }[] };
+  let body: { messages?: unknown };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const messages = body.messages;
-  if (!Array.isArray(messages) || messages.length === 0) {
+  if (!Array.isArray(body.messages) || body.messages.length === 0) {
+    return NextResponse.json(
+      { error: "messages array is required." },
+      { status: 400 }
+    );
+  }
+
+  // Hard-filter to only user/assistant turns with string content. This
+  // is the prompt-injection defense — a caller could otherwise put a
+  // `role: "system"` message in the body and override SYSTEM_PROMPT.
+  const messages: { role: "user" | "assistant"; content: string }[] = [];
+  for (const raw of body.messages) {
+    if (!raw || typeof raw !== "object") continue;
+    const m = raw as { role?: unknown; content?: unknown };
+    if (m.role !== "user" && m.role !== "assistant") continue;
+    if (typeof m.content !== "string" || m.content.length === 0) continue;
+    if (m.content.length > MAX_USER_INPUT_LENGTH) {
+      return NextResponse.json(
+        { reply: "Your message is too long. Please keep it brief and I'll help you right away!", fallback: false }
+      );
+    }
+    messages.push({ role: m.role, content: m.content });
+  }
+
+  if (messages.length === 0) {
     return NextResponse.json(
       { error: "messages array is required." },
       { status: 400 }
@@ -113,13 +136,6 @@ export async function POST(request: NextRequest) {
   if (messages.length > MAX_MESSAGES) {
     return NextResponse.json(
       { reply: `Let's continue this conversation by phone. Call us at ${HELPLINE} or email ${HELPLINE_EMAIL}.`, fallback: true }
-    );
-  }
-
-  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-  if (lastUserMsg && typeof lastUserMsg.content === "string" && lastUserMsg.content.length > MAX_USER_INPUT_LENGTH) {
-    return NextResponse.json(
-      { reply: "Your message is too long. Please keep it brief and I'll help you right away!", fallback: false }
     );
   }
 
@@ -133,7 +149,7 @@ export async function POST(request: NextRequest) {
 
   const chatMessages = [
     { role: "system", content: SYSTEM_PROMPT },
-    ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ...messages,
   ];
 
   try {

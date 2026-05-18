@@ -82,7 +82,7 @@ export default function PrivacyPolicyPage() {
               <li><strong>Google (Maps Platform):</strong> Address geocoding, autocomplete, and travel-time calculation — receives the service address you enter</li>
               <li><strong>Twilio (USA):</strong> WhatsApp and SMS delivery for booking confirmations and reminders — receives your phone number and the message contents</li>
               <li><strong>n8n (self-hosted by Ductly):</strong> Internal workflow automation that dispatches teams and triggers notifications — processes booking data on our infrastructure</li>
-              <li><strong>OpenRouter (USA):</strong> LLM provider used for team-assignment optimisation and our customer chatbot — receives anonymised booking metadata (no name, email, or phone)</li>
+              <li><strong>OpenRouter (USA):</strong> LLM provider used for two distinct purposes. (1) Team-assignment optimisation: receives anonymised booking metadata only — no name, email, or phone. (2) Customer support chatbot on our landing page: receives the free-form messages you type into the chat widget along with the conversation history of that session. Do not paste sensitive personal information into the chatbot.</li>
             </ul>
             <p className="mt-2">We do not sell your data to any third party.</p>
           </section>
