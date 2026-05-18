@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, type ReactNode } from "react";
 import { motion, useInView } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
+import ChatWidget from "@/components/ChatWidget";
 
 /* ─── Animation ──────────────────────────────────────────────────────────── */
 
@@ -761,6 +762,7 @@ export default function Home() {
         <ContactSection />
       </main>
       <Footer />
+      <ChatWidget />
     </>
   );
 }
