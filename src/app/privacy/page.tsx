@@ -3,7 +3,7 @@ import Image from "next/image";
 
 export const metadata = {
   title: "Privacy Policy | DUCTly",
-  description: "DUCTly privacy policy — how we collect, use, and protect your personal data.",
+  description: "DUCTly privacy policy G�� how we collect, use, and protect your personal data.",
 };
 
 export default function PrivacyPolicyPage() {
@@ -45,7 +45,7 @@ export default function PrivacyPolicyPage() {
               <li><strong>Contact information:</strong> Full name, email address, phone number</li>
               <li><strong>Service address:</strong> Property address where the service will be performed</li>
               <li><strong>Property details:</strong> Property type (villa, apartment, office), number of bedrooms, number of thermostats</li>
-              <li><strong>Payment data:</strong> Processed securely by Stripe — we never store your card details</li>
+              <li><strong>Payment data:</strong> Processed securely by Stripe G�� we never store your card details</li>
               <li><strong>Booking data:</strong> Selected date, time, and service plan</li>
             </ul>
           </section>
@@ -77,18 +77,12 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-[20px] font-medium mb-3" style={{ fontFamily: "var(--font-heading)", color: "rgb(61,61,61)" }}>5. Third-Party Services</h2>
             <p>We share your data with the following third parties, solely for service delivery:</p>
             <ul className="list-disc pl-6 mt-2 space-y-1">
-<<<<<<< HEAD
               <li><strong>Stripe (Ireland):</strong> Payment processing — receives name, email, phone, billing address (PCI DSS compliant)</li>
               <li><strong>Supabase (AWS, EU):</strong> Database and authentication hosting — stores all booking and customer records</li>
               <li><strong>Google (Maps Platform):</strong> Address geocoding, autocomplete, and travel-time calculation — receives the service address you enter</li>
               <li><strong>Twilio (USA):</strong> WhatsApp and SMS delivery for booking confirmations and reminders — receives your phone number and the message contents</li>
               <li><strong>n8n (self-hosted by Ductly):</strong> Internal workflow automation that dispatches teams and triggers notifications — processes booking data on our infrastructure</li>
               <li><strong>OpenRouter (USA):</strong> LLM provider used for two distinct purposes. (1) Team-assignment optimisation: receives anonymised booking metadata only — no name, email, or phone. (2) Customer support chatbot on our landing page: receives the free-form messages you type into the chat widget along with the conversation history of that session. Do not paste sensitive personal information into the chatbot.</li>
-=======
-              <li><strong>Stripe:</strong> Payment processing (PCI DSS compliant)</li>
-              <li><strong>Google Maps:</strong> Address geocoding and travel time calculation</li>
-              <li><strong>Supabase:</strong> Database hosting and authentication</li>
->>>>>>> f20d3f6 (commit)
             </ul>
             <p className="mt-2">We do not sell your data to any third party.</p>
           </section>
