@@ -130,6 +130,32 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Blackout check — refuse if a global blackout covers this slot, or
+  // (when no remaining teams) every active team has a blackout here.
+  const { data: overlappingBlackouts } = await supabase
+    .from("schedule_blackouts")
+    .select("team_id, reason")
+    .lt("starts_at", computedSlotEnd)
+    .gt("ends_at", slot_start)
+    .returns<{ team_id: string | null; reason: string }[]>();
+
+  if (overlappingBlackouts && overlappingBlackouts.length > 0) {
+    const globalBlackout = overlappingBlackouts.find((b) => b.team_id === null);
+    if (globalBlackout) {
+      return NextResponse.json(
+        { error: `Time is blocked: ${globalBlackout.reason}` },
+        { status: 409 }
+      );
+    }
+    const blackedTeamIds = new Set(overlappingBlackouts.map((b) => b.team_id).filter(Boolean));
+    if (blackedTeamIds.size >= totalTeams) {
+      return NextResponse.json(
+        { error: "All teams are blocked for this time range." },
+        { status: 409 }
+      );
+    }
+  }
+
   // 1. Upsert customer (email optional for phone-in).
   // Admin-created bookings record verbal consent on the customer's
   // behalf — see ADMIN_RECORDED_CONSENT_VERSION sentinel.

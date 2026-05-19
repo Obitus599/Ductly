@@ -21,6 +21,14 @@ interface CalendarBooking {
   customers: { name: string; phone: string } | null;
 }
 
+interface Blackout {
+  id: string;
+  team_id: string | null;
+  starts_at: string;
+  ends_at: string;
+  reason: string;
+}
+
 const STATUS_COLOR: Record<string, string> = {
   pending: "rgb(234,179,8)",
   confirmed: "rgb(34,197,94)",
@@ -70,16 +78,93 @@ export default function CalendarPage() {
   });
   const [teams, setTeams] = useState<Team[]>([]);
   const [bookings, setBookings] = useState<CalendarBooking[]>([]);
+  const [blackouts, setBlackouts] = useState<Blackout[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Block-time modal state
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [blockTeamId, setBlockTeamId] = useState<string>("");
+  const [blockStartDate, setBlockStartDate] = useState("");
+  const [blockStartTime, setBlockStartTime] = useState("08:00");
+  const [blockEndDate, setBlockEndDate] = useState("");
+  const [blockEndTime, setBlockEndTime] = useState("18:00");
+  const [blockReason, setBlockReason] = useState("");
+  const [blockSubmitting, setBlockSubmitting] = useState(false);
+  const [blockError, setBlockError] = useState("");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/admin/calendar?date=${date}`);
-    const data = await res.json();
-    setTeams(data.teams ?? []);
-    setBookings(data.bookings ?? []);
+    const [calRes, bRes] = await Promise.all([
+      fetch(`/api/admin/calendar?date=${date}`),
+      fetch(`/api/admin/schedule-blackouts?from=${date}&to=${date}`),
+    ]);
+    const calData = await calRes.json();
+    const bData = await bRes.json();
+    setTeams(calData.teams ?? []);
+    setBookings(calData.bookings ?? []);
+    setBlackouts(bData.blackouts ?? []);
     setLoading(false);
   }, [date]);
+
+  function openBlockModal() {
+    setBlockTeamId("");
+    setBlockStartDate(date);
+    setBlockStartTime("08:00");
+    setBlockEndDate(date);
+    setBlockEndTime("18:00");
+    setBlockReason("");
+    setBlockError("");
+    setShowBlockModal(true);
+  }
+
+  async function submitBlock() {
+    if (blockSubmitting) return;
+    if (!blockReason.trim()) {
+      setBlockError("Reason is required.");
+      return;
+    }
+    const starts_at = `${blockStartDate}T${blockStartTime}:00+04:00`;
+    const ends_at = `${blockEndDate}T${blockEndTime}:00+04:00`;
+    if (new Date(ends_at) <= new Date(starts_at)) {
+      setBlockError("End must be after start.");
+      return;
+    }
+    setBlockSubmitting(true);
+    setBlockError("");
+    try {
+      const res = await fetch("/api/admin/schedule-blackouts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          team_id: blockTeamId || null,
+          starts_at,
+          ends_at,
+          reason: blockReason.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBlockError(
+          data.conflicts?.length
+            ? `${data.error} (${data.conflicts.length} conflicting booking${data.conflicts.length > 1 ? "s" : ""})`
+            : data.error || "Failed to block time."
+        );
+        return;
+      }
+      setShowBlockModal(false);
+      await fetchData();
+    } catch {
+      setBlockError("Network error.");
+    } finally {
+      setBlockSubmitting(false);
+    }
+  }
+
+  async function deleteBlackout(id: string) {
+    if (!confirm("Remove this blocked time? This will free up the slot for bookings.")) return;
+    await fetch(`/api/admin/schedule-blackouts/${id}`, { method: "DELETE" });
+    await fetchData();
+  }
 
   useEffect(() => {
     fetchData();
@@ -152,7 +237,49 @@ export default function CalendarPage() {
         >
           Today
         </button>
+        <div className="ml-auto">
+          <button
+            type="button"
+            onClick={openBlockModal}
+            className="text-[13px] font-medium px-4 py-2 rounded-[10px] text-white hover:brightness-110 transition-all"
+            style={{
+              background: "linear-gradient(135deg, rgb(147,216,216) 0%, rgb(149,207,140) 100%)",
+              fontFamily: "var(--font-cta)",
+            }}
+          >
+            + Block time
+          </button>
+        </div>
       </div>
+
+      {/* Active blackouts on this date */}
+      {blackouts.length > 0 && (
+        <div className="mb-5 rounded-[14px] border-2 p-4" style={{ background: "rgb(252,250,240)", borderColor: "rgb(245,225,140)" }}>
+          <p className="text-[12px] mb-2 font-medium" style={{ fontFamily: "var(--font-body)", color: "rgb(140,110,20)" }}>
+            Blocked time on this date
+          </p>
+          <ul className="space-y-1.5">
+            {blackouts.map((bo) => {
+              const teamName = bo.team_id ? teams.find((t) => t.id === bo.team_id)?.name ?? "Unknown team" : "All teams";
+              return (
+                <li key={bo.id} className="flex items-center justify-between gap-3 text-[13px]" style={{ fontFamily: "var(--font-body)", color: "rgb(80,80,80)" }}>
+                  <span>
+                    <strong>{teamName}</strong> · {formatTime(bo.starts_at)} – {formatTime(bo.ends_at)} · {bo.reason}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => deleteBlackout(bo.id)}
+                    className="text-[12px] px-2.5 py-1 rounded-[6px] hover:bg-[rgba(180,60,60,0.08)] transition-colors"
+                    style={{ fontFamily: "var(--font-cta)", color: "rgb(180,60,60)" }}
+                  >
+                    Remove
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-20">
@@ -292,6 +419,152 @@ export default function CalendarPage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Block-time modal */}
+      {showBlockModal && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={() => !blockSubmitting && setShowBlockModal(false)}
+        >
+          <div
+            className="w-full max-w-[460px] p-6 rounded-[16px]"
+            style={{ background: "white", border: "2px solid rgb(238,240,244)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2
+              className="text-[18px] font-normal tracking-[-0.02em] mb-1"
+              style={{ fontFamily: "var(--font-heading)", color: "rgb(61,61,61)" }}
+            >
+              Block time
+            </h2>
+            <p
+              className="text-[12px] mb-5"
+              style={{ fontFamily: "var(--font-body)", color: "rgb(160,165,175)" }}
+            >
+              Prevents new bookings inside this range. Existing bookings in the same window must be cancelled first.
+            </p>
+
+            <div className="space-y-3 mb-5">
+              <label className="block">
+                <span className="block text-[12px] mb-1.5" style={{ fontFamily: "var(--font-body)", color: "rgb(109,109,109)" }}>
+                  Team
+                </span>
+                <select
+                  value={blockTeamId}
+                  onChange={(e) => setBlockTeamId(e.target.value)}
+                  className="w-full rounded-[10px] border-2 border-[rgb(230,230,230)] bg-white px-3.5 py-2 text-[13px] focus:border-[rgb(147,216,216)] focus:outline-none"
+                  style={{ fontFamily: "var(--font-body)" }}
+                >
+                  <option value="">All teams (global blackout)</option>
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="block text-[12px] mb-1.5" style={{ fontFamily: "var(--font-body)", color: "rgb(109,109,109)" }}>
+                    Start date
+                  </span>
+                  <input
+                    type="date"
+                    value={blockStartDate}
+                    onChange={(e) => setBlockStartDate(e.target.value)}
+                    className="w-full rounded-[10px] border-2 border-[rgb(230,230,230)] bg-white px-3.5 py-2 text-[13px]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-[12px] mb-1.5" style={{ fontFamily: "var(--font-body)", color: "rgb(109,109,109)" }}>
+                    Start time
+                  </span>
+                  <input
+                    type="time"
+                    value={blockStartTime}
+                    onChange={(e) => setBlockStartTime(e.target.value)}
+                    className="w-full rounded-[10px] border-2 border-[rgb(230,230,230)] bg-white px-3.5 py-2 text-[13px]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-[12px] mb-1.5" style={{ fontFamily: "var(--font-body)", color: "rgb(109,109,109)" }}>
+                    End date
+                  </span>
+                  <input
+                    type="date"
+                    value={blockEndDate}
+                    onChange={(e) => setBlockEndDate(e.target.value)}
+                    className="w-full rounded-[10px] border-2 border-[rgb(230,230,230)] bg-white px-3.5 py-2 text-[13px]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-[12px] mb-1.5" style={{ fontFamily: "var(--font-body)", color: "rgb(109,109,109)" }}>
+                    End time
+                  </span>
+                  <input
+                    type="time"
+                    value={blockEndTime}
+                    onChange={(e) => setBlockEndTime(e.target.value)}
+                    className="w-full rounded-[10px] border-2 border-[rgb(230,230,230)] bg-white px-3.5 py-2 text-[13px]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  />
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="block text-[12px] mb-1.5" style={{ fontFamily: "var(--font-body)", color: "rgb(109,109,109)" }}>
+                  Reason
+                </span>
+                <input
+                  type="text"
+                  value={blockReason}
+                  onChange={(e) => setBlockReason(e.target.value)}
+                  placeholder="e.g. Public holiday, team training"
+                  maxLength={500}
+                  className="w-full rounded-[10px] border-2 border-[rgb(230,230,230)] bg-white px-3.5 py-2 text-[13px] focus:border-[rgb(147,216,216)] focus:outline-none"
+                  style={{ fontFamily: "var(--font-body)" }}
+                />
+              </label>
+            </div>
+
+            {blockError && (
+              <div
+                className="mb-4 rounded-[10px] p-3 text-[12px]"
+                style={{ background: "rgb(255,245,245)", border: "1px solid rgb(255,200,200)", color: "rgb(180,60,60)", fontFamily: "var(--font-body)" }}
+              >
+                {blockError}
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowBlockModal(false)}
+                disabled={blockSubmitting}
+                className="px-4 py-2 rounded-[10px] border-2 border-[rgb(230,230,230)] text-[13px] text-[rgb(109,109,109)] hover:bg-[rgb(247,248,250)] transition-colors disabled:opacity-50"
+                style={{ fontFamily: "var(--font-cta)" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitBlock}
+                disabled={blockSubmitting}
+                className="px-4 py-2 rounded-[10px] text-white text-[13px] hover:brightness-110 transition-all disabled:opacity-50"
+                style={{
+                  background: "linear-gradient(135deg, rgb(147,216,216) 0%, rgb(149,207,140) 100%)",
+                  fontFamily: "var(--font-cta)",
+                }}
+              >
+                {blockSubmitting ? "Blocking…" : "Block time"}
+              </button>
             </div>
           </div>
         </div>

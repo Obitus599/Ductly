@@ -276,6 +276,55 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // ── 3b. Schedule blackouts (admin-set unavailability) ────────────────
+    // Modelled as synthetic bookings so the existing pass1/pass2 filters
+    // exclude them automatically. Global blackouts (team_id=null) expand
+    // to one synthetic booking per active team. Wrapped in its own
+    // try/catch so a transient blackouts-table problem can't take down
+    // the customer-facing slot query.
+    let blackouts: { team_id: string | null; starts_at: string; ends_at: string }[] = [];
+    try {
+      const { data, error } = await supabase
+        .from("schedule_blackouts")
+        .select("team_id, starts_at, ends_at")
+        .lt("starts_at", dayEnd)
+        .gt("ends_at", dayStart)
+        .returns<{ team_id: string | null; starts_at: string; ends_at: string }[]>();
+      if (error) {
+        console.error("Blackouts query error:", error);
+      } else {
+        blackouts = data ?? [];
+      }
+    } catch (err) {
+      console.error("Blackouts query threw:", err);
+    }
+
+    const blackoutBookings: BookingRecord[] = [];
+    for (const b of blackouts) {
+      if (b.team_id) {
+        blackoutBookings.push({
+          slot_start: b.starts_at,
+          slot_end: b.ends_at,
+          team_id: b.team_id,
+          address: "",
+        });
+      } else {
+        for (const teamId of activeTeamIds) {
+          blackoutBookings.push({
+            slot_start: b.starts_at,
+            slot_end: b.ends_at,
+            team_id: teamId,
+            address: "",
+          });
+        }
+      }
+    }
+
+    const effectiveBookings: BookingRecord[] = [
+      ...(bookings ?? []),
+      ...blackoutBookings,
+    ];
+
     // ── 4. Query active (non-expired) booking locks for this date ────────
 
     const { data: locks, error: locksError } = await supabase
@@ -299,7 +348,7 @@ export async function GET(request: NextRequest) {
     const afterPass1 = pass1DbFilter(
       candidates,
       jobDurationMins,
-      bookings || [],
+      effectiveBookings,
       locks || [],
       totalActiveTeams
     );
@@ -309,10 +358,10 @@ export async function GET(request: NextRequest) {
     const referenceDate = new Date(date + "T12:00:00+04:00");
     const afterPass2 = address && (process.env.GOOGLE_MAPS_SERVER_KEY || process.env.GOOGLE_MAPS_API_KEY)
       ? await pass2TravelFilter(
-          afterPass1, jobDurationMins, bookings || [], locks || [],
+          afterPass1, jobDurationMins, effectiveBookings, locks || [],
           address, activeTeamIds, referenceDate
         )
-      : pass2BufferFilter(afterPass1, bookings || [], jobDurationMins);
+      : pass2BufferFilter(afterPass1, effectiveBookings, jobDurationMins);
 
     // ── 7. Return clean time strings ─────────────────────────────────────
 
