@@ -102,7 +102,7 @@ export default function PrivacyPolicyPage() {
               <li><strong>Download your data:</strong> <code className="text-[13px]">GET /api/me/export?token=&lt;your-token&gt;</code> returns a JSON file with every record we hold about you.</li>
               <li><strong>Delete your account:</strong> <code className="text-[13px]">POST /api/me/delete</code> with <code className="text-[13px]">{`{ "token": "<your-token>" }`}</code> anonymises your personal data. Booking and payment records are retained for the period required by UAE commercial law (see section 7), but your name, email, and phone number are removed.</li>
             </ul>
-            <p className="mt-3">If you can&apos;t find your management link or need help, contact us at <a href="mailto:privacy@ductly.ae" className="underline" style={{ color: "rgb(60,140,130)" }}>privacy@ductly.ae</a>.</p>
+            <p className="mt-3">If you can&apos;t find your management link or need help, contact us at <a href="mailto:info@ductly.ae" className="underline" style={{ color: "rgb(60,140,130)" }}>info@ductly.ae</a>.</p>
           </section>
 
           <section>
@@ -113,7 +113,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-[20px] font-medium mb-3" style={{ fontFamily: "var(--font-heading)", color: "rgb(61,61,61)" }}>8. Contact</h2>
             <p>For privacy-related inquiries:<br />
-              Email: <a href="mailto:privacy@ductly.ae" className="underline" style={{ color: "rgb(60,140,130)" }}>privacy@ductly.ae</a><br />
+              Email: <a href="mailto:info@ductly.ae" className="underline" style={{ color: "rgb(60,140,130)" }}>info@ductly.ae</a><br />
               DUCTly, Dubai, United Arab Emirates
             </p>
           </section>

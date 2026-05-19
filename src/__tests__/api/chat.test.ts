@@ -275,7 +275,8 @@ describe("POST /api/chat", () => {
       expect(fetchOptions.headers.Authorization).toBe("Bearer test-openrouter-key");
       const body = JSON.parse(fetchOptions.body);
       expect(body.model).toBe("nvidia/nemotron-3-super-120b-a12b:free");
-      expect(body.max_tokens).toBe(150);
+      expect(body.max_tokens).toBe(300);
+      expect(body.reasoning).toEqual({ enabled: false });
       expect(body.messages[0].role).toBe("system");
       expect(body.messages[1].role).toBe("user");
       expect(body.messages[1].content).toBe("What services?");

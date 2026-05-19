@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { motion, useInView } from "framer-motion";
 import Link from "next/link";
-import Image from "next/image";
 import ChatWidget from "@/components/ChatWidget";
+import Image from "next/image";
 
 /* ─── Animation ──────────────────────────────────────────────────────────── */
 
@@ -539,10 +539,10 @@ function StatsSection() {
 /* ─── FAQ ─────────────────────────────────────────────────────────────────── */
 
 const faqs = [
-  { q: "How much does your cleaning service cost?", a: "Our pricing starts at 500 AED per thermostat for the Essential plan. We offer three tiers \u2014 Essential, Signature, and Elite \u2014 to match your needs and budget. Contact us for a personalized quote." },
+  { q: "How much does your cleaning service cost?", a: "Our pricing starts at 500 AED per thermostat for the Essential plan. We offer three tiers - Essential, Signature, and Elite - to match your needs and budget. Contact us for a personalized quote." },
   { q: "Do you offer a free cleaning services estimate?", a: "Yes, we provide free estimates for all residential and commercial properties. Our team will assess your HVAC system and provide a detailed quote with no obligation." },
-  { q: "How long will Ac duct cleaning take?", a: "A typical residential cleaning takes 90 minutes. Larger properties or commercial spaces may take 2\u20134 hours depending on the number of units and complexity of the ductwork." },
-  { q: "Can duct cleaning reduce electricity bills?", a: "Absolutely. A clean HVAC system operates more efficiently, which can reduce your energy consumption by 15\u201325%. Most customers notice a difference in their first bill after cleaning." },
+  { q: "How long will Ac duct cleaning take?", a: "A typical residential cleaning takes 90 minutes. Larger properties or commercial spaces may take 2-4 hours depending on the number of units and complexity of the ductwork." },
+  { q: "Can duct cleaning reduce electricity bills?", a: "Absolutely. A clean HVAC system operates more efficiently, which can reduce your energy consumption by 15-25%. Most customers notice a difference in their first bill after cleaning." },
   { q: "Do you provide AC duct cleaning for offices and retail spaces?", a: "Yes, we serve all commercial properties including offices, retail stores, restaurants, and warehouses. We offer flexible scheduling to minimize disruption to your business operations." },
 ];
 

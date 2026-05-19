@@ -3,7 +3,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
-const MAX_TOKENS = 150;
+const MAX_TOKENS = 300;
 const MAX_MESSAGES = 10;
 const MAX_USER_INPUT_LENGTH = 500;
 const HELPLINE = "+971 54 161 0793";
@@ -78,6 +78,7 @@ COMPANY INFO:
 - UAE's #1 duct cleaning company
 
 RESPONSE RULES:
+- Do NOT include your reasoning or thought process in your response — output ONLY the final answer
 - Keep answers under 3 sentences unless listing features
 - Be warm and friendly but professional
 - When mentioning prices, always say "starting at" and note "per thermostat"
@@ -164,6 +165,7 @@ export async function POST(request: NextRequest) {
         max_tokens: MAX_TOKENS,
         temperature: 0.3,
         messages: chatMessages,
+        reasoning: { enabled: false },
       }),
       signal: AbortSignal.timeout(30_000),
     });
