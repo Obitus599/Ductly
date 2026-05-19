@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { getTravelTime } from "@/lib/travel-math";
+import { checkRateLimit } from "@/lib/rate-limit";
 import {
   type BookingRecord,
   type LockRecord,
@@ -176,6 +177,18 @@ async function pass2TravelFilter(
  * Returns a clean JSON array of available time strings.
  */
 export async function GET(request: NextRequest) {
+  // Rate-limit this endpoint — it does Google Maps Distance Matrix
+  // calls which cost real money. Legitimate UI doesn't poll faster
+  // than ~1/sec, so 60/min is generous.
+  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const rl = await checkRateLimit(`slots:${clientIp}`, 60, 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many slot lookups. Please slow down." },
+      { status: 429 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
   const address = searchParams.get("address");

@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { assignTeamToBooking } from "@/lib/scheduling-agent";
+import { fireN8nWebhook } from "@/lib/n8n";
 import Stripe from "stripe";
 
 /**
@@ -127,28 +128,24 @@ export async function POST(request: NextRequest) {
           const customerInfo = bookingData?.customers as Record<string, unknown> | null;
           const addrDetails = bookingData?.address_details as Record<string, unknown> | null;
 
-          fetch(n8nDispatchUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              event: "team_dispatch",
-              booking_id: bookingId,
-              team_id: result.teamId,
-              team_name: teamData?.name || "",
-              team_whatsapp: teamData?.whatsapp_number || "",
-              customer_name: customerInfo?.name || "",
-              customer_phone: customerInfo?.phone || "",
-              address: address || "",
-              building_name: addrDetails?.building_name || "",
-              flat_number: addrDetails?.flat_number || "",
-              floor: addrDetails?.floor || "",
-              additional_directions: addrDetails?.additional_directions || "",
-              slot_start: slotStart,
-              slot_end: bookingData?.slot_end || "",
-              plan: metadata.plan || "",
-              price_aed: metadata.price_aed || "",
-            }),
-          }).catch((err) => console.error("n8n dispatch webhook failed:", err));
+          fireN8nWebhook("team_dispatch", n8nDispatchUrl, {
+            event: "team_dispatch",
+            booking_id: bookingId,
+            team_id: result.teamId,
+            team_name: teamData?.name || "",
+            team_whatsapp: teamData?.whatsapp_number || "",
+            customer_name: customerInfo?.name || "",
+            customer_phone: customerInfo?.phone || "",
+            address: address || "",
+            building_name: addrDetails?.building_name || "",
+            flat_number: addrDetails?.flat_number || "",
+            floor: addrDetails?.floor || "",
+            additional_directions: addrDetails?.additional_directions || "",
+            slot_start: slotStart,
+            slot_end: bookingData?.slot_end || "",
+            plan: metadata.plan || "",
+            price_aed: metadata.price_aed || "",
+          });
         }
       } catch (agentError) {
         console.error("Team assignment failed:", agentError);
@@ -175,26 +172,22 @@ export async function POST(request: NextRequest) {
           .returns<Record<string, unknown>[]>()
           .single();
 
-        fetch(n8nBookingUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            event: "booking_confirmed",
-            booking_id: bookingId,
-            customer_name: fullBooking?.customers && typeof fullBooking.customers === "object" ? (fullBooking.customers as Record<string, unknown>).name : metadata.customer_id,
-            customer_email: session.customer_email,
-            customer_phone: fullBooking?.customers && typeof fullBooking.customers === "object" ? (fullBooking.customers as Record<string, unknown>).phone : "",
-            address: address || "",
-            address_details: fullBooking?.address_details || null,
-            slot_start: slotStart,
-            slot_end: fullBooking?.slot_end || "",
-            team_id: fullBooking?.team_id || null,
-            plan: metadata.plan || "",
-            price_aed: metadata.price_aed || "",
-            manage_token: manageToken,
-            payment_intent_id: session.payment_intent,
-          }),
-        }).catch((err) => console.error("n8n booking webhook failed:", err));
+        fireN8nWebhook("booking_confirmed", n8nBookingUrl, {
+          event: "booking_confirmed",
+          booking_id: bookingId,
+          customer_name: fullBooking?.customers && typeof fullBooking.customers === "object" ? (fullBooking.customers as Record<string, unknown>).name : metadata.customer_id,
+          customer_email: session.customer_email,
+          customer_phone: fullBooking?.customers && typeof fullBooking.customers === "object" ? (fullBooking.customers as Record<string, unknown>).phone : "",
+          address: address || "",
+          address_details: fullBooking?.address_details || null,
+          slot_start: slotStart,
+          slot_end: fullBooking?.slot_end || "",
+          team_id: fullBooking?.team_id || null,
+          plan: metadata.plan || "",
+          price_aed: metadata.price_aed || "",
+          manage_token: manageToken,
+          payment_intent_id: session.payment_intent,
+        });
       }
 
       break;
@@ -235,17 +228,13 @@ export async function POST(request: NextRequest) {
       // 4. Trigger n8n webhook for payment failure notification
       const n8nFailureUrl = process.env.N8N_WEBHOOK_PAYMENT_FAILED;
       if (n8nFailureUrl) {
-        fetch(n8nFailureUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            event: "payment_failed",
-            booking_id: bookingId,
-            payment_intent_id: paymentIntent.id,
-            error_message: paymentIntent.last_payment_error?.message || "Payment failed",
-            customer_email: paymentIntent.receipt_email || "",
-          }),
-        }).catch((err) => console.error("n8n failure webhook failed:", err));
+        fireN8nWebhook("payment_failed", n8nFailureUrl, {
+          event: "payment_failed",
+          booking_id: bookingId ?? "",
+          payment_intent_id: paymentIntent.id,
+          error_message: paymentIntent.last_payment_error?.message || "Payment failed",
+          customer_email: paymentIntent.receipt_email || "",
+        });
       }
 
       break;

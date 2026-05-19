@@ -81,11 +81,16 @@ describe("middleware", () => {
     expect(cookies.some((c: string) => c.includes("admin-token") && c.includes("Max-Age=0"))).toBe(true);
   });
 
-  it("allows through when Supabase verification fails (network error)", async () => {
+  it("FAILS CLOSED when Supabase verification fails (network error)", async () => {
+    // Security: a Supabase outage must not turn a long-expired admin
+    // cookie into a valid session. Pre-2026-05-19 this returned 200
+    // (open-on-error) — see middleware.ts for the post-hoc fix.
     mockFetch.mockRejectedValue(new Error("network timeout"));
     const res = await middleware(makeRequest("/admin", "some-token"));
-    // Should NOT redirect — graceful degradation
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/admin/login");
+    const cookies = res.headers.getSetCookie();
+    expect(cookies.some((c: string) => c.includes("admin-token") && c.includes("Max-Age=0"))).toBe(true);
   });
 
   it("allows public API routes through", async () => {

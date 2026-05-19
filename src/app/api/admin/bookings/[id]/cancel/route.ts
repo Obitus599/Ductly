@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin } from "@/lib/admin-auth";
+import { fireN8nWebhook } from "@/lib/n8n";
 
 /**
  * POST /api/admin/bookings/[id]/cancel
@@ -93,21 +94,17 @@ export async function POST(
       .returns<{ name: string; phone: string; email: string }[]>()
       .single();
 
-    fetch(n8nCancelUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        event: "booking_cancelled",
-        booking_id: booking.id,
-        customer_name: customer?.name || "",
-        customer_phone: customer?.phone || "",
-        customer_email: customer?.email || "",
-        slot_start: booking.slot_start,
-        reason: reason || "No reason provided",
-        refund_status: issueRefund ? refundStatus : "no_refund",
-        cancelled_by: "admin",
-      }),
-    }).catch((err) => console.error("n8n cancel webhook failed:", err));
+    fireN8nWebhook("booking_cancelled_admin", n8nCancelUrl, {
+      event: "booking_cancelled",
+      booking_id: booking.id,
+      customer_name: customer?.name || "",
+      customer_phone: customer?.phone || "",
+      customer_email: customer?.email || "",
+      slot_start: booking.slot_start,
+      reason: reason || "No reason provided",
+      refund_status: issueRefund ? refundStatus : "no_refund",
+      cancelled_by: "admin",
+    });
   }
 
   return NextResponse.json({

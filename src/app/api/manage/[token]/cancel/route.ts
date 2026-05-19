@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { fireN8nWebhook } from "@/lib/n8n";
 
 const CANCELLATION_WINDOW_HOURS = 24;
 
@@ -125,21 +126,17 @@ export async function POST(
       .returns<{ name: string; phone: string; email: string }[]>()
       .single();
 
-    fetch(n8nCancelUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        event: "booking_cancelled",
-        booking_id: booking.id,
-        customer_name: customer?.name || "",
-        customer_phone: customer?.phone || "",
-        customer_email: customer?.email || "",
-        slot_start: booking.slot_start,
-        reason: reason || "No reason provided",
-        refund_status: refundStatus,
-        cancelled_by: "customer",
-      }),
-    }).catch((err) => console.error("n8n cancel webhook failed:", err));
+    fireN8nWebhook("booking_cancelled_customer", n8nCancelUrl, {
+      event: "booking_cancelled",
+      booking_id: booking.id,
+      customer_name: customer?.name || "",
+      customer_phone: customer?.phone || "",
+      customer_email: customer?.email || "",
+      slot_start: booking.slot_start,
+      reason: reason || "No reason provided",
+      refund_status: refundStatus,
+      cancelled_by: "customer",
+    });
   }
 
   return NextResponse.json({
