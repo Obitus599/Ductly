@@ -1,0 +1,20 @@
+{
+  "friendly_name": "team_dispatch",
+  "language": "en",
+  "variables": {
+    "1": "Team Alpha",
+    "2": "2026-04-21T10:00:00+04:00",
+    "3": "Ahmed",
+    "4": "Dubai Marina, Tower 5",
+    "5": "Marina Tower 3",
+    "6": "Apt 1204",
+    "7": "Enter from Gate 3",
+    "8": "Signature",
+    "9": "+971501234567"
+  },
+  "types": {
+    "twilio/text": {
+      "body": "New dispatch for {{1}} at {{2}}. Customer: {{3}} (phone: {{9}}). Address: {{4}}. Building: {{5}}. Flat: {{6}}. Directions: {{7}}. Plan: {{8}}."
+    }
+  }
+}

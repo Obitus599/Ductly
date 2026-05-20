@@ -1,0 +1,13 @@
+{
+  "friendly_name": "no_show_followup",
+  "language": "en",
+  "variables": {
+    "1": "Ahmed",
+    "2": "2026-04-21T10:00:00+04:00"
+  },
+  "types": {
+    "twilio/text": {
+      "body": "Hi {{1}}, our team arrived for your scheduled duct cleaning at {{2}} but wasn't able to reach you. We'd love to reschedule — visit ductly.ae/book to pick a new time."
+    }
+  }
+}

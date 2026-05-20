@@ -1,0 +1,14 @@
+{
+  "friendly_name": "booking_reminder_1h",
+  "language": "en",
+  "variables": {
+    "1": "Ahmed",
+    "2": "2026-04-21T10:00:00+04:00",
+    "3": "Team Alpha"
+  },
+  "types": {
+    "twilio/text": {
+      "body": "Hi {{1}}, your duct cleaning team ({{3}}) is arriving soon for your {{2}} appointment. Please ensure access to your property."
+    }
+  }
+}
