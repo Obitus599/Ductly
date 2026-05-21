@@ -44,6 +44,11 @@ export function buildMapsLink(
  * Format an ISO timestamp into a UAE-local human-readable string for
  * dispatch messages. "Tue 21 Apr, 10:00 AM" reads cleanly to a team
  * member glancing at WhatsApp on their phone.
+ *
+ * The 12-hour conversion is done manually rather than via `hour12: true`
+ * — Node 20 ICU has known edge-case bugs around hour boundaries (it
+ * has previously returned "0" or "24" at midnight). Doing the math
+ * ourselves makes the output identical across runtimes.
  */
 export function formatSlotForDispatch(iso: string): string {
   try {
@@ -57,17 +62,21 @@ export function formatSlotForDispatch(iso: string): string {
       month: "short",
       hour: "numeric",
       minute: "2-digit",
-      hour12: true,
+      hour12: false,
     }).formatToParts(d);
 
     const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
     const wkday = get("weekday");
     const day = get("day");
     const month = get("month");
-    const hour = get("hour");
-    const minute = get("minute");
-    const period = get("dayPeriod").toUpperCase();
-    return `${wkday} ${day} ${month}, ${hour}:${minute} ${period}`;
+    const minute = get("minute") || "00";
+
+    // Node 20 ICU can return "24" for midnight — normalize to 0-23 first.
+    const rawHour = Number(get("hour") || "0") % 24;
+    const hour12 = rawHour % 12 || 12;
+    const period = rawHour < 12 ? "AM" : "PM";
+
+    return `${wkday} ${day} ${month}, ${hour12}:${minute} ${period}`;
   } catch {
     return iso;
   }

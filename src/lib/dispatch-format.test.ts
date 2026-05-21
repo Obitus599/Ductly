@@ -57,6 +57,24 @@ describe("formatSlotForDispatch", () => {
     const formatted = formatSlotForDispatch("2026-04-20T20:00:00Z");
     expect(formatted).toMatch(/12:00 AM/);
   });
+
+  it("handles noon UAE correctly", () => {
+    // 12:00 UAE = 08:00 UTC
+    const formatted = formatSlotForDispatch("2026-04-21T08:00:00Z");
+    expect(formatted).toMatch(/12:00 PM/);
+  });
+
+  it("formats 1 PM (post-noon hour) correctly", () => {
+    // 13:00 UAE = 09:00 UTC
+    const formatted = formatSlotForDispatch("2026-04-21T09:00:00Z");
+    expect(formatted).toMatch(/1:00 PM/);
+  });
+
+  it("formats 11 PM correctly", () => {
+    // 23:00 UAE = 19:00 UTC
+    const formatted = formatSlotForDispatch("2026-04-21T19:00:00Z");
+    expect(formatted).toMatch(/11:00 PM/);
+  });
 });
 
 describe("addressQuality", () => {
