@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 vi.mock("@/lib/admin-auth", () => ({
   requireAdmin: vi.fn().mockReturnValue(null),
+  requireSameOrigin: vi.fn().mockReturnValue(null),
 }));
 
 // Mock global fetch for geocode/distance matrix

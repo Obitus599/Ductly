@@ -89,7 +89,10 @@ describe("POST /api/admin/auth (login)", () => {
 
 describe("DELETE /api/admin/auth (logout)", () => {
   it("clears both auth cookies", async () => {
-    const res = await DELETE();
+    const req = new NextRequest("http://localhost:3000/api/admin/auth", {
+      method: "DELETE",
+    });
+    const res = await DELETE(req);
     expect(res.status).toBe(200);
     const cookies = res.headers.getSetCookie();
     expect(cookies.some((c: string) => c.includes("admin-token") && c.includes("Max-Age=0"))).toBe(true);

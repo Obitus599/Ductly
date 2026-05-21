@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 
 interface BlackoutRow {
   id: string;
@@ -59,6 +59,8 @@ export async function GET(request: NextRequest) {
  * the proposed range — admin must cancel/reschedule them first.
  */
 export async function POST(request: NextRequest) {
+  const csrfError = requireSameOrigin(request);
+  if (csrfError) return csrfError;
   const authError = requireAdmin(request);
   if (authError) return authError;
 

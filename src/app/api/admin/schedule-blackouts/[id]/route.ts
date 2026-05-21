@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 
 /**
  * DELETE /api/admin/schedule-blackouts/[id]
@@ -11,6 +11,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const csrfError = requireSameOrigin(request);
+  if (csrfError) return csrfError;
   const authError = requireAdmin(request);
   if (authError) return authError;
 

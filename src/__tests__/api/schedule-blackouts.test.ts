@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 vi.mock("@/lib/admin-auth", () => ({
   requireAdmin: vi.fn().mockReturnValue(null),
+  requireSameOrigin: vi.fn().mockReturnValue(null),
 }));
 
 const mockSupabase = { from: vi.fn() };

@@ -13,6 +13,7 @@ vi.mock("@/lib/stripe", () => ({
       },
     },
   },
+  isStripeTestMode: () => false,
 }));
 
 const mockSupabase = {

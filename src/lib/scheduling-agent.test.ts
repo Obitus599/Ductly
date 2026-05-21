@@ -91,11 +91,18 @@ describe("assignTeamToBooking — deterministic fallback", () => {
       }
       if (table === "bookings") {
         const bookingData = [
-          { team_id: "team-a", slot_start: "2025-04-15T08:00:00+04:00", slot_end: "2025-04-15T09:30:00+04:00", address: "addr1" },
-          { team_id: "team-a", slot_start: "2025-04-15T12:00:00+04:00", slot_end: "2025-04-15T13:30:00+04:00", address: "addr2" },
+          { team_id: "team-a", slot_start: "2025-04-15T08:00:00+04:00", slot_end: "2025-04-15T09:30:00+04:00", address: "addr1", address_details: null },
+          { team_id: "team-a", slot_start: "2025-04-15T12:00:00+04:00", slot_end: "2025-04-15T13:30:00+04:00", address: "addr2", address_details: null },
         ];
         return {
           select: () => ({
+            // Single-booking lookup for address_details (new code path)
+            eq: () => ({
+              returns: () => ({
+                single: vi.fn().mockResolvedValue({ data: { address_details: null }, error: null }),
+              }),
+            }),
+            // List query for getExistingBookingsForDate
             gte: () => ({
               lte: () => ({
                 not: () => ({
@@ -107,8 +114,15 @@ describe("assignTeamToBooking — deterministic fallback", () => {
               }),
             }),
           }),
+          // Conditional team_id update (only when team_id IS NULL)
           update: () => ({
-            eq: vi.fn().mockResolvedValue({ error: null }),
+            eq: () => ({
+              is: () => ({
+                select: () => ({
+                  returns: vi.fn().mockResolvedValue({ data: [{ id: "booking-123" }], error: null }),
+                }),
+              }),
+            }),
           }),
         };
       }
@@ -121,7 +135,7 @@ describe("assignTeamToBooking — deterministic fallback", () => {
               }),
             }),
           }),
-          insert: vi.fn().mockResolvedValue({ error: null }),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
         };
       }
       return {};
@@ -239,6 +253,11 @@ describe("assignTeamToBooking — agent path failure → fallback", () => {
       if (table === "bookings") {
         return {
           select: () => ({
+            eq: () => ({
+              returns: () => ({
+                single: vi.fn().mockResolvedValue({ data: { address_details: null }, error: null }),
+              }),
+            }),
             gte: () => ({
               lte: () => ({
                 not: () => ({
@@ -251,7 +270,13 @@ describe("assignTeamToBooking — agent path failure → fallback", () => {
             }),
           }),
           update: () => ({
-            eq: vi.fn().mockResolvedValue({ error: null }),
+            eq: () => ({
+              is: () => ({
+                select: () => ({
+                  returns: vi.fn().mockResolvedValue({ data: [{ id: "booking-123" }], error: null }),
+                }),
+              }),
+            }),
           }),
         };
       }
@@ -264,7 +289,7 @@ describe("assignTeamToBooking — agent path failure → fallback", () => {
               }),
             }),
           }),
-          insert: vi.fn().mockResolvedValue({ error: null }),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
         };
       }
       return {};

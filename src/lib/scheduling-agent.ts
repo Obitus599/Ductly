@@ -36,6 +36,29 @@ interface BookingInfo {
   slot_start: string;
   slot_end: string;
   address: string;
+  address_details: Record<string, unknown> | null;
+}
+
+/**
+ * Haversine straight-line distance between two coordinates in km.
+ * Used as a cheap travel-cost proxy in the deterministic fallback
+ * tiebreak — we don't hit Google Distance Matrix here because the
+ * fallback is meant to be fast and offline-safe.
+ */
+function haversineKm(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 // ─── Tool Implementations ────────────────────────────────────────────────────
@@ -104,7 +127,7 @@ async function getExistingBookingsForDate(date: string): Promise<BookingInfo[]> 
   const supabase = supabaseAdmin;
   const { data } = await supabase
     .from("bookings")
-    .select("team_id, slot_start, slot_end, address")
+    .select("team_id, slot_start, slot_end, address, address_details")
     .gte("slot_start", `${date}T00:00:00+04:00`)
     .lte("slot_start", `${date}T23:59:59+04:00`)
     .not("status", "in", '("cancelled")')
@@ -133,24 +156,42 @@ async function assignBookingToTeam(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = supabaseAdmin;
 
-  // Update booking with assigned team (status already set to "confirmed" by webhook)
-  const { error: bookingError } = await supabase
+  // Conditional update: only assign team_id if it's still unassigned.
+  // If an admin manually set it between checkout and now, we yield —
+  // don't override their decision. Combined with the slot_locks
+  // unique-on-booking_id constraint, this closes the race between
+  // the webhook agent and admin team-reassignment writes.
+  const { data: claimed, error: bookingError } = await supabase
     .from("bookings")
     .update({ team_id: teamId } as never)
-    .eq("id", bookingId);
+    .eq("id", bookingId)
+    .is("team_id", null)
+    .select("id")
+    .returns<{ id: string }[]>();
 
   if (bookingError) {
     return { success: false, error: bookingError.message };
   }
 
-  // Create permanent slot lock
+  if (!claimed || claimed.length === 0) {
+    // Admin already assigned a team — leave their slot_lock in place.
+    console.log(
+      `Scheduling agent yielded for booking ${bookingId} — team already assigned by admin`
+    );
+    return { success: true };
+  }
+
+  // Upsert slot lock (unique on booking_id — replaces any orphan).
   const { error: lockError } = await supabase
     .from("slot_locks")
-    .insert({
-      team_id: teamId,
-      slot_start: slotStart,
-      booking_id: bookingId,
-    } as never);
+    .upsert(
+      {
+        team_id: teamId,
+        slot_start: slotStart,
+        booking_id: bookingId,
+      } as never,
+      { onConflict: "booking_id" }
+    );
 
   if (lockError) {
     return { success: false, error: lockError.message };
@@ -311,18 +352,58 @@ async function deterministicAssign(
     throw new Error("No teams available for this slot");
   }
 
-  // Pick the team with the fewest bookings today (least-booked rule)
-  const teamBookingCounts = new Map<string, number>();
+  // Look up the new booking's coordinates for travel-distance tiebreak.
+  const supabase = supabaseAdmin;
+  const { data: newBooking } = await supabase
+    .from("bookings")
+    .select("address_details")
+    .eq("id", bookingId)
+    .returns<{ address_details: Record<string, unknown> | null }[]>()
+    .single();
+  const newLat = (newBooking?.address_details?.lat as number | undefined) ?? null;
+  const newLng = (newBooking?.address_details?.lng as number | undefined) ?? null;
+
+  // Per-team booking count + distance from their last job before this slot.
+  // Distance = 0 when (a) team has no prior booking today, or (b) we lack
+  // coordinates for either end. That keeps the heuristic safe — when in
+  // doubt, fall back to pure least-booked.
+  const teamScores = new Map<string, { count: number; distanceKm: number }>();
   for (const id of availableTeams) {
-    teamBookingCounts.set(id, 0);
+    teamScores.set(id, { count: 0, distanceKm: 0 });
   }
+
   for (const b of existingBookings) {
-    if (b.team_id && teamBookingCounts.has(b.team_id)) {
-      teamBookingCounts.set(b.team_id, (teamBookingCounts.get(b.team_id) || 0) + 1);
+    if (!b.team_id || !teamScores.has(b.team_id)) continue;
+    const score = teamScores.get(b.team_id)!;
+    score.count += 1;
+  }
+
+  if (newLat !== null && newLng !== null) {
+    for (const id of availableTeams) {
+      // Most recent booking ending before this slot start
+      const priorJobs = existingBookings
+        .filter((b) => b.team_id === id)
+        .filter((b) => new Date(b.slot_end).getTime() <= slotStartMs)
+        .sort(
+          (a, b) =>
+            new Date(b.slot_end).getTime() - new Date(a.slot_end).getTime()
+        );
+      const prior = priorJobs[0];
+      const priorLat = prior?.address_details?.lat as number | undefined;
+      const priorLng = prior?.address_details?.lng as number | undefined;
+
+      if (typeof priorLat === "number" && typeof priorLng === "number") {
+        const score = teamScores.get(id)!;
+        score.distanceKm = haversineKm(priorLat, priorLng, newLat, newLng);
+      }
     }
   }
 
-  const sorted = Array.from(teamBookingCounts.entries()).sort((a, b) => a[1] - b[1]);
+  // Sort: fewest bookings first; tiebreak on shortest travel distance.
+  const sorted = Array.from(teamScores.entries()).sort((a, b) => {
+    if (a[1].count !== b[1].count) return a[1].count - b[1].count;
+    return a[1].distanceKm - b[1].distanceKm;
+  });
   const chosenTeamId = sorted[0][0];
 
   const result = await assignBookingToTeam(bookingId, chosenTeamId, slotStart);
@@ -330,6 +411,11 @@ async function deterministicAssign(
     throw new Error(`Fallback assignment failed: ${result.error}`);
   }
 
+  console.log(
+    `Deterministic fallback picked ${chosenTeamId} (count=${sorted[0][1].count}, distance=${sorted[0][1].distanceKm.toFixed(
+      1
+    )}km)`
+  );
   return { teamId: chosenTeamId, method: "fallback" };
 }
 

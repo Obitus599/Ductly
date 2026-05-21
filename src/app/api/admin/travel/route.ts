@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 import ngeohash from "ngeohash";
 
 const UAE_OFFSET_MS = 4 * 60 * 60 * 1000; // UTC+4
@@ -104,6 +104,8 @@ async function distanceMatrix(
  * }
  */
 export async function POST(request: NextRequest) {
+  const csrfError = requireSameOrigin(request);
+  if (csrfError) return csrfError;
   const authError = requireAdmin(request);
   if (authError) return authError;
 

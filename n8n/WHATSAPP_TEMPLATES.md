@@ -121,25 +121,34 @@ when submitted in Twilio Content Builder.
 
 ### Body Parameters (in order)
 
-| # | Type | Description                      | Example                       |
-|---|------|----------------------------------|-------------------------------|
-| 1 | text | Team name                        | "Team Alpha"                  |
-| 2 | text | Appointment time                 | "2026-04-21T10:00:00+04:00"   |
-| 3 | text | Customer name                    | "Ahmed"                       |
-| 4 | text | Full address                     | "Dubai Marina, Tower 5"       |
-| 5 | text | Building name (may be blank)     | "Marina Tower 3"              |
-| 6 | text | Flat number (may be blank)       | "Apt 1204"                    |
-| 7 | text | Additional directions or "None"  | "Enter from Gate 3"           |
-| 8 | text | Plan tier                        | "Signature"                   |
-| 9 | text | Customer phone                   | "+971501234567"               |
+| # | Type | Description                       | Example                                                                 |
+|---|------|-----------------------------------|-------------------------------------------------------------------------|
+| 1 | text | Team name                         | "Team Alpha"                                                            |
+| 2 | text | Appointment time (formatted)      | "Tue 21 Apr, 10:00 AM"                                                  |
+| 3 | text | Customer name                     | "Ahmed"                                                                 |
+| 4 | text | Full address                      | "Dubai Marina, Tower 5"                                                 |
+| 5 | text | Building name (or "-")            | "Marina Tower 3"                                                        |
+| 6 | text | Flat number (or "-")              | "Apt 1204"                                                              |
+| 7 | text | Additional directions or "None"   | "Enter from Gate 3"                                                     |
+| 8 | text | Plan tier                         | "Signature"                                                             |
+| 9 | text | Customer phone                    | "+971501234567"                                                         |
+| 10| text | Google Maps deep link             | "https://www.google.com/maps/search/?api=1&query=25.0772,55.1390"       |
 
 ### Suggested Body Text
 
-> New dispatch for {{1}}: {{2}}. Customer: {{3}} (phone: {{9}}). Location: {{4}}{{5 ? ', ' + {{5}} : ''}}{{6 ? ', Flat ' + {{6}} : ''}}. Directions: {{7}}. Plan: {{8}}.
+> New job for {{1}}. When: {{2}}. Customer: {{3}} ({{9}}). Address: {{4}}, {{5}}, {{6}}. Directions: {{7}}. Plan: {{8}}. Navigate: {{10}}
+
+The time string is pre-formatted server-side by
+`formatSlotForDispatch()` in `src/lib/dispatch-format.ts` — n8n
+receives it ready to render.
+
+The maps link is built server-side by `buildMapsLink()` from
+`address_details.place_id` or `lat/lng` if available, falling back to
+a text-query Maps URL. Tapping it opens the venue in Google Maps and
+the team can hit "Directions" from there.
 
 (Twilio's WhatsApp template format doesn't support conditional
-parameters — pass empty strings for fields that may be blank, and
-ensure the wording reads correctly with empty values.)
+parameters — pass "-" or "None" for fields that may be blank.)
 
 ---
 
