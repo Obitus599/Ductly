@@ -8,9 +8,9 @@ import { ADMIN_RECORDED_CONSENT_VERSION } from "@/lib/consent";
 
 /** Plan config — must match shared.tsx / checkout PLAN_CONFIG */
 const PLAN_CONFIG: Record<string, { rate: number; setupMins: number; perThermostatMins: number }> = {
-  essential: { rate: 500, setupMins: 45, perThermostatMins: 45 },
-  signature: { rate: 750, setupMins: 80, perThermostatMins: 45 },
-  elite:     { rate: 900, setupMins: 80, perThermostatMins: 60 },
+  essential: { rate: 349, setupMins: 45, perThermostatMins: 45 },
+  signature: { rate: 549, setupMins: 80, perThermostatMins: 45 },
+  elite:     { rate: 699, setupMins: 80, perThermostatMins: 60 },
 };
 
 /**

@@ -60,7 +60,7 @@ describe("GET /api/booking-details", () => {
         property_type: "villa",
         bedrooms: "3",
         thermostats: "4",
-        price_aed: "3000",
+        price_aed: "2196",
       },
     });
 
@@ -70,7 +70,7 @@ describe("GET /api/booking-details", () => {
     expect(data.plan).toBe("signature");
     expect(data.address).toBe("123 Test St");
     expect(data.thermostats).toBe("4");
-    expect(data.price_aed).toBe("3000");
+    expect(data.price_aed).toBe("2196");
   });
 
   it("returns defaults when metadata fields are missing", async () => {

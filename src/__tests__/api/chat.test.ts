@@ -119,7 +119,7 @@ describe("POST /api/chat", () => {
 
     it("allows exactly MAX_MESSAGES", async () => {
       mockCheckRateLimit.mockResolvedValue({ allowed: true });
-      setupOpenRouterReply("Pricing starts at 500 AED.");
+      setupOpenRouterReply("Pricing starts at 349 AED.");
       const res = await POST(makeRequest({ messages: makeMessages(10) }));
       expect(res.status).toBe(200);
     });
@@ -176,11 +176,11 @@ describe("POST /api/chat", () => {
   describe("OpenRouter integration", () => {
     it("returns reply from OpenRouter on success", async () => {
       mockCheckRateLimit.mockResolvedValue({ allowed: true });
-      setupOpenRouterReply("Duct cleaning starts at 500 AED per thermostat.");
+      setupOpenRouterReply("Duct cleaning starts at 349 AED per thermostat.");
       const res = await POST(makeRequest({ messages: [{ role: "user", content: "pricing?" }] }));
       expect(res.status).toBe(200);
       const data = await res.json();
-      expect(data.reply).toBe("Duct cleaning starts at 500 AED per thermostat.");
+      expect(data.reply).toBe("Duct cleaning starts at 349 AED per thermostat.");
       expect(data.fallback).toBe(false);
     });
 

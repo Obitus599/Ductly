@@ -164,7 +164,7 @@ describe("POST /api/checkout", () => {
     const data = await res.json();
     expect(data.checkout_url).toBe("https://checkout.stripe.com/test");
     expect(data.booking_id).toBe("book-1");
-    expect(data.price_aed).toBe(3000); // 4 thermostats × 750 AED
+    expect(data.price_aed).toBe(2196); // 4 thermostats × 549 AED
   });
 
   it("passes correct args to Stripe (price, metadata, idempotency)", async () => {
@@ -173,15 +173,15 @@ describe("POST /api/checkout", () => {
     expect(mockStripeCreate).toHaveBeenCalledTimes(1);
     const [createArgs, createOpts] = mockStripeCreate.mock.calls[0];
 
-    // Price: signature plan (750) × 4 thermostats = 3000 AED = 300000 fils
-    expect(createArgs.line_items[0].price_data.unit_amount).toBe(300000);
+    // Price: signature plan (549) × 4 thermostats = 2196 AED = 219600 fils
+    expect(createArgs.line_items[0].price_data.unit_amount).toBe(219600);
     expect(createArgs.line_items[0].price_data.currency).toBe("aed");
 
     // Metadata
     expect(createArgs.metadata.booking_id).toBe("book-1");
     expect(createArgs.metadata.plan).toBe("signature");
     expect(createArgs.metadata.thermostats).toBe("4");
-    expect(createArgs.metadata.price_aed).toBe("3000");
+    expect(createArgs.metadata.price_aed).toBe("2196");
     expect(createArgs.metadata.address).toBe("123 Test St, Dubai");
 
     // Idempotency key
@@ -194,15 +194,15 @@ describe("POST /api/checkout", () => {
   it("calculates correct price for essential plan", async () => {
     await POST(makeRequest({ ...VALID_BODY, plan: "essential", thermostats: 2 }));
     const [createArgs] = mockStripeCreate.mock.calls[0];
-    // essential (500) × 2 = 1000 AED = 100000 fils
-    expect(createArgs.line_items[0].price_data.unit_amount).toBe(100000);
+    // essential (349) × 2 = 698 AED = 69800 fils
+    expect(createArgs.line_items[0].price_data.unit_amount).toBe(69800);
   });
 
   it("calculates correct price for elite plan", async () => {
     await POST(makeRequest({ ...VALID_BODY, plan: "elite", thermostats: 1 }));
     const [createArgs] = mockStripeCreate.mock.calls[0];
-    // elite (900) × 1 = 900 AED = 90000 fils
-    expect(createArgs.line_items[0].price_data.unit_amount).toBe(90000);
+    // elite (699) × 1 = 699 AED = 69900 fils
+    expect(createArgs.line_items[0].price_data.unit_amount).toBe(69900);
   });
 
   it("returns 500 when customer upsert fails", async () => {

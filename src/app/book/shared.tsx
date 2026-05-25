@@ -10,9 +10,9 @@ export interface PlanConfig {
 }
 
 export const PLANS: Record<string, PlanConfig> = {
-  essential: { name: "Essential", rate: 500, setupMins: 45, perThermostatMins: 45 },
-  signature: { name: "Signature", rate: 750, setupMins: 80, perThermostatMins: 45 },
-  elite:     { name: "Elite",     rate: 900, setupMins: 80, perThermostatMins: 60 },
+  essential: { name: "Essential", rate: 349, setupMins: 45, perThermostatMins: 45 },
+  signature: { name: "Signature", rate: 549, setupMins: 80, perThermostatMins: 45 },
+  elite:     { name: "Elite",     rate: 699, setupMins: 80, perThermostatMins: 60 },
 };
 
 /** Calculate total job duration in minutes for a given plan and thermostat count. */

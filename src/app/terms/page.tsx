@@ -52,9 +52,9 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-[20px] font-medium mb-3" style={{ fontFamily: "var(--font-heading)", color: "rgb(61,61,61)" }}>3. Service Plans</h2>
             <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Essential Plan (AED 500/thermostat):</strong> Standard duct cleaning with inspection report.</li>
-              <li><strong>Signature Plan (AED 750/thermostat):</strong> Deep cleaning with sanitization and before/after documentation.</li>
-              <li><strong>Elite Plan (AED 900/thermostat):</strong> Premium service including mold treatment, coil cleaning, and extended warranty.</li>
+              <li><strong>Essential Plan (AED 349/thermostat):</strong> Standard duct cleaning with inspection report.</li>
+              <li><strong>Signature Plan (AED 549/thermostat):</strong> Deep cleaning with sanitization and before/after documentation.</li>
+              <li><strong>Elite Plan (AED 699/thermostat):</strong> Premium service including mold treatment, coil cleaning, and extended warranty.</li>
             </ul>
           </section>
 

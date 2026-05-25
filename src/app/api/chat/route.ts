@@ -30,15 +30,15 @@ SERVICES & COVERAGE:
 - Free estimates for all residential and commercial properties — no obligation
 
 PLANS & PRICING (all prices in AED per thermostat):
-1. Essential — 500 AED/thermostat
+1. Essential — 349 AED/thermostat
    Basic duct vacuuming. Perfect for light maintenance.
    Includes: TurboClean, Fan coil unit cleaning, HEPA vacuuming, Filter cleaning
 
-2. Signature — 750 AED/thermostat (BEST DEAL)
+2. Signature — 549 AED/thermostat (BEST DEAL)
    Full medical-grade sanitization and restoration.
    Includes: TurboClean, Filter cleaning, Fan coil unit cleaning, Fumigation, Bio-enzyme disinfection, Mold remediation treatment, Black mold remediation
 
-3. Elite — 900 AED/thermostat
+3. Elite — 699 AED/thermostat
    Ultimate protection with 12-month air purity guarantee.
    Includes: Everything in Signature + AC unit coil deep clean, Air quality analysis
 
@@ -50,7 +50,7 @@ BOOKING & PROCESS:
 
 FAQ:
 Q: How much does your cleaning service cost?
-A: Our pricing starts at 500 AED per thermostat for the Essential plan. We offer three tiers — Essential, Signature, and Elite — to match your needs and budget. Contact us for a personalized quote.
+A: Our pricing starts at 349 AED per thermostat for the Essential plan. We offer three tiers — Essential, Signature, and Elite — to match your needs and budget. Contact us for a personalized quote.
 
 Q: Do you offer a free cleaning services estimate?
 A: Yes, we provide free estimates for all residential and commercial properties. Our team will assess your HVAC system and provide a detailed quote with no obligation.
