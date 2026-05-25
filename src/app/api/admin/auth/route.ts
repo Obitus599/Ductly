@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { requireSameOrigin } from "@/lib/admin-auth";
 
 /**
  * POST /api/admin/auth
@@ -8,6 +10,20 @@ import { createClient } from "@supabase/supabase-js";
  */
 export async function POST(request: NextRequest) {
   try {
+    const csrfError = requireSameOrigin(request);
+    if (csrfError) return csrfError;
+
+    // Rate limit BEFORE doing any work: 5 attempts per 15 minutes per IP.
+    // This is the credential-stuffing / brute-force gate.
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const rl = await checkRateLimit(`admin-auth:${clientIp}`, 5, 15 * 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many sign-in attempts. Try again in 15 minutes." },
+        { status: 429 }
+      );
+    }
+
     const { email, password } = await request.json();
 
     if (!email || !password) {
@@ -66,7 +82,10 @@ export async function POST(request: NextRequest) {
  * DELETE /api/admin/auth
  * Logs out the admin user by clearing auth cookies.
  */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  const csrfError = requireSameOrigin(request);
+  if (csrfError) return csrfError;
+
   const response = NextResponse.json({ success: true });
   response.cookies.set("admin-token", "", { maxAge: 0, path: "/" });
   response.cookies.set("admin-refresh", "", { maxAge: 0, path: "/" });

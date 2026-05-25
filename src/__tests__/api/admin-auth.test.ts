@@ -10,6 +10,11 @@ vi.mock("@supabase/supabase-js", () => ({
   }),
 }));
 
+const mockCheckRateLimit = vi.fn().mockResolvedValue({ allowed: true });
+vi.mock("@/lib/rate-limit", () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 import { POST, DELETE } from "@/app/api/admin/auth/route";
 
 function makePostRequest(body: Record<string, unknown>): NextRequest {
@@ -73,11 +78,21 @@ describe("POST /api/admin/auth (login)", () => {
     const res = await POST(makePostRequest({ email: "admin@test.com", password: "pass" }));
     expect(res.status).toBe(500);
   });
+
+  it("returns 429 when rate-limited (brute-force protection)", async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({ allowed: false });
+    const res = await POST(makePostRequest({ email: "admin@test.com", password: "pass" }));
+    expect(res.status).toBe(429);
+    expect(mockSignIn).not.toHaveBeenCalled();
+  });
 });
 
 describe("DELETE /api/admin/auth (logout)", () => {
   it("clears both auth cookies", async () => {
-    const res = await DELETE();
+    const req = new NextRequest("http://localhost:3000/api/admin/auth", {
+      method: "DELETE",
+    });
+    const res = await DELETE(req);
     expect(res.status).toBe(200);
     const cookies = res.headers.getSetCookie();
     expect(cookies.some((c: string) => c.includes("admin-token") && c.includes("Max-Age=0"))).toBe(true);

@@ -1,0 +1,15 @@
+{
+  "friendly_name": "booking_confirmed",
+  "language": "en",
+  "variables": {
+    "1": "Ahmed",
+    "2": "2026-04-21T10:00:00+04:00",
+    "3": "Dubai Marina, Tower 5",
+    "4": "AED 3000"
+  },
+  "types": {
+    "twilio/text": {
+      "body": "Hi {{1}}, your DUCTly duct-cleaning booking is confirmed for {{2}} at {{3}}. Total: {{4}}. We'll send a reminder 24 hours before your appointment."
+    }
+  }
+}

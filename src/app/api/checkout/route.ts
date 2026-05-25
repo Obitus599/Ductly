@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { stripe, isStripeTestMode } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
@@ -166,6 +166,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Upsert customer (refresh consent record on every booking)
+    const testMode = isStripeTestMode();
     const { data: customer, error: customerError } = await supabaseAdmin
       .from("customers")
       .upsert(
@@ -176,6 +177,7 @@ export async function POST(request: NextRequest) {
           consent_given_at: new Date().toISOString(),
           consent_version,
           deleted_at: null,
+          is_test_data: testMode,
         } as never,
         { onConflict: "email" }
       )
@@ -201,6 +203,7 @@ export async function POST(request: NextRequest) {
         address,
         address_details: address_details || null,
         status: "pending",
+        is_test_data: testMode,
       } as never)
       .select("id")
       .returns<{ id: string }[]>()

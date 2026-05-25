@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 
 interface TeamRow {
   id: string;
@@ -65,6 +65,8 @@ export async function GET(request: NextRequest) {
  * Body: { id: string, active?: boolean, whatsapp_number?: string, name?: string }
  */
 export async function PATCH(request: NextRequest) {
+  const csrfError = requireSameOrigin(request);
+  if (csrfError) return csrfError;
   const authError = requireAdmin(request);
   if (authError) return authError;
 

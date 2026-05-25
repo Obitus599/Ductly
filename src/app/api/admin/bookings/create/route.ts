@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/utils/supabase/admin";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 import { assignTeamToBooking } from "@/lib/scheduling-agent";
 import { UAE_TZ_SUFFIX } from "@/lib/slot-helpers";
 import { ADMIN_RECORDED_CONSENT_VERSION } from "@/lib/consent";
@@ -21,6 +21,8 @@ const PLAN_CONFIG: Record<string, { rate: number; setupMins: number; perThermost
  * Server-side slot_end recalculation from plan + thermostats.
  */
 export async function POST(request: NextRequest) {
+  const csrfError = requireSameOrigin(request);
+  if (csrfError) return csrfError;
   const authError = requireAdmin(request);
   if (authError) return authError;
 
@@ -125,6 +127,32 @@ export async function POST(request: NextRequest) {
     if (occupiedTeamIds.size >= totalTeams) {
       return NextResponse.json(
         { error: "All teams are occupied at this time. No available slot for this booking." },
+        { status: 409 }
+      );
+    }
+  }
+
+  // Blackout check — refuse if a global blackout covers this slot, or
+  // (when no remaining teams) every active team has a blackout here.
+  const { data: overlappingBlackouts } = await supabase
+    .from("schedule_blackouts")
+    .select("team_id, reason")
+    .lt("starts_at", computedSlotEnd)
+    .gt("ends_at", slot_start)
+    .returns<{ team_id: string | null; reason: string }[]>();
+
+  if (overlappingBlackouts && overlappingBlackouts.length > 0) {
+    const globalBlackout = overlappingBlackouts.find((b) => b.team_id === null);
+    if (globalBlackout) {
+      return NextResponse.json(
+        { error: `Time is blocked: ${globalBlackout.reason}` },
+        { status: 409 }
+      );
+    }
+    const blackedTeamIds = new Set(overlappingBlackouts.map((b) => b.team_id).filter(Boolean));
+    if (blackedTeamIds.size >= totalTeams) {
+      return NextResponse.json(
+        { error: "All teams are blocked for this time range." },
         { status: 409 }
       );
     }

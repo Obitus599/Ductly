@@ -13,6 +13,11 @@ export async function GET(request: NextRequest) {
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - now.getDay()); // Sunday
 
+  // Show test data only when ?include_test=1 is passed. Default
+  // analytics exclude is_test_data rows so Stripe test bookings
+  // don't pollute production counts.
+  const includeTest = request.nextUrl.searchParams.get("include_test") === "1";
+
   // Parallel queries
   const [
     { count: totalBookings },
@@ -23,22 +28,36 @@ export async function GET(request: NextRequest) {
     { data: workloads },
     { data: recentBookings },
   ] = await Promise.all([
-    supabase
-      .from("bookings")
-      .select("*", { count: "exact", head: true }),
-    supabase
-      .from("bookings")
-      .select("*", { count: "exact", head: true })
-      .gte("slot_start", todayStr + "T00:00:00")
-      .lt("slot_start", todayStr + "T23:59:59"),
-    supabase
-      .from("bookings")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "pending"),
-    supabase
-      .from("bookings")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "confirmed"),
+    (() => {
+      let q = supabase.from("bookings").select("*", { count: "exact", head: true });
+      if (!includeTest) q = q.eq("is_test_data", false);
+      return q;
+    })(),
+    (() => {
+      let q = supabase
+        .from("bookings")
+        .select("*", { count: "exact", head: true })
+        .gte("slot_start", todayStr + "T00:00:00")
+        .lt("slot_start", todayStr + "T23:59:59");
+      if (!includeTest) q = q.eq("is_test_data", false);
+      return q;
+    })(),
+    (() => {
+      let q = supabase
+        .from("bookings")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
+      if (!includeTest) q = q.eq("is_test_data", false);
+      return q;
+    })(),
+    (() => {
+      let q = supabase
+        .from("bookings")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "confirmed");
+      if (!includeTest) q = q.eq("is_test_data", false);
+      return q;
+    })(),
     supabase
       .from("teams")
       .select("id, name, active")
@@ -47,12 +66,15 @@ export async function GET(request: NextRequest) {
       .from("team_workloads")
       .select("*")
       .returns<{ team_id: string; team_name: string; bookings_this_week: number; bookings_this_month: number }[]>(),
-    supabase
-      .from("bookings")
-      .select("id, slot_start, slot_end, address, status, customer_id, team_id")
-      .order("created_at", { ascending: false })
-      .limit(10)
-      .returns<{ id: string; slot_start: string; slot_end: string; address: string; status: string; customer_id: string; team_id: string | null }[]>(),
+    (() => {
+      let q = supabase
+        .from("bookings")
+        .select("id, slot_start, slot_end, address, status, customer_id, team_id")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (!includeTest) q = q.eq("is_test_data", false);
+      return q.returns<{ id: string; slot_start: string; slot_end: string; address: string; status: string; customer_id: string; team_id: string | null }[]>();
+    })(),
   ]);
 
   return NextResponse.json({

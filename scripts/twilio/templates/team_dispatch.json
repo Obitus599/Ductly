@@ -1,0 +1,21 @@
+{
+  "friendly_name": "team_dispatch",
+  "language": "en",
+  "variables": {
+    "1": "Team Alpha",
+    "2": "Tue 21 Apr, 10:00 AM",
+    "3": "Ahmed",
+    "4": "Dubai Marina, Tower 5",
+    "5": "Marina Tower 3",
+    "6": "Apt 1204",
+    "7": "Enter from Gate 3",
+    "8": "Signature",
+    "9": "+971501234567",
+    "10": "https://www.google.com/maps/search/?api=1&query=25.0772,55.1390"
+  },
+  "types": {
+    "twilio/text": {
+      "body": "New job for {{1}}. When: {{2}}. Customer: {{3}} ({{9}}). Address: {{4}}, {{5}}, {{6}}. Directions: {{7}}. Plan: {{8}}. Navigate: {{10}}"
+    }
+  }
+}

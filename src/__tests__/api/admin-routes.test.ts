@@ -6,6 +6,7 @@ import { NextRequest } from "next/server";
 // Mock admin auth — always allow (tested separately in admin-auth.test.ts)
 vi.mock("@/lib/admin-auth", () => ({
   requireAdmin: vi.fn().mockReturnValue(null),
+  requireSameOrigin: vi.fn().mockReturnValue(null),
 }));
 
 // Mock supabaseAdmin (admin routes use service role client)
@@ -24,20 +25,27 @@ describe("GET /api/admin/bookings", () => {
   });
 
   it("returns paginated bookings", async () => {
+    // Fluent chain that resolves to the same data regardless of which
+    // filter methods (.eq / .gte) are added — the route adds
+    // .eq("is_test_data", false) by default.
+    const finalResult = {
+      data: [
+        { id: "b1", slot_start: "2025-04-15T10:00:00+04:00", status: "confirmed" },
+      ],
+      count: 1,
+      error: null,
+    };
+    const chain: Record<string, unknown> = {
+      returns: vi.fn().mockResolvedValue(finalResult),
+    };
+    chain.eq = vi.fn().mockReturnValue(chain);
+    chain.gte = vi.fn().mockReturnValue(chain);
+    chain.lt = vi.fn().mockReturnValue(chain);
+
     mockSupabaseClient.from.mockReturnValue({
       select: () => ({
         order: () => ({
-          range: () => ({
-            eq: vi.fn(),
-            gte: vi.fn(),
-            returns: vi.fn().mockResolvedValue({
-              data: [
-                { id: "b1", slot_start: "2025-04-15T10:00:00+04:00", status: "confirmed" },
-              ],
-              count: 1,
-              error: null,
-            }),
-          }),
+          range: () => chain,
         }),
       }),
     });
@@ -53,16 +61,21 @@ describe("GET /api/admin/bookings", () => {
   });
 
   it("returns 500 when Supabase query fails", async () => {
+    const chain: Record<string, unknown> = {
+      returns: vi.fn().mockResolvedValue({
+        data: null,
+        count: null,
+        error: { message: "table not found" },
+      }),
+    };
+    chain.eq = vi.fn().mockReturnValue(chain);
+    chain.gte = vi.fn().mockReturnValue(chain);
+    chain.lt = vi.fn().mockReturnValue(chain);
+
     mockSupabaseClient.from.mockReturnValue({
       select: () => ({
         order: () => ({
-          range: () => ({
-            returns: vi.fn().mockResolvedValue({
-              data: null,
-              count: null,
-              error: { message: "table not found" },
-            }),
-          }),
+          range: () => chain,
         }),
       }),
     });
@@ -185,7 +198,10 @@ describe("GET /api/admin/teams", () => {
 describe("DELETE /api/admin/auth (logout)", () => {
   it("clears auth cookies and returns success", async () => {
     const { DELETE } = await import("@/app/api/admin/auth/route");
-    const res = await DELETE();
+    const req = new NextRequest("http://localhost:3000/api/admin/auth", {
+      method: "DELETE",
+    });
+    const res = await DELETE(req);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.success).toBe(true);

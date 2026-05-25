@@ -1,0 +1,15 @@
+{
+  "friendly_name": "booking_reminder_24h",
+  "language": "en",
+  "variables": {
+    "1": "Ahmed",
+    "2": "2026-04-21T10:00:00+04:00",
+    "3": "Dubai Marina, Tower 5",
+    "4": "Team Alpha"
+  },
+  "types": {
+    "twilio/text": {
+      "body": "Hi {{1}}, this is a reminder that your duct cleaning appointment is scheduled for {{2}} at {{3}}. Your team: {{4}}. Need to reschedule? Use the link in your confirmation email."
+    }
+  }
+}

@@ -117,3 +117,26 @@ jobs:
             # Plesk runs the app via Phusion Passenger (not pm2). Passenger
             # reloads when tmp/restart.txt is touched.
             mkdir -p tmp && touch tmp/restart.txt
+
+      - name: Post-deploy health check
+        # Polls the live site's /api/health endpoint until it returns 200
+        # (or 503 with a well-formed body, which means the app booted but
+        # a downstream is degraded — still a successful deploy). Fails
+        # the workflow if the site never responds within ~60s, which
+        # is the signal that the new build crashed at startup.
+        run: |
+          set -e
+          URL="https://staging.ductly.ae/api/health"
+          echo "Polling $URL for up to 60s..."
+          for i in $(seq 1 12); do
+            code=$(curl -sk -o /tmp/health.json -w "%{http_code}" --max-time 5 "$URL" || echo "000")
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+              echo "Got HTTP $code after $((i*5))s:"
+              cat /tmp/health.json
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $code (retrying in 5s)"
+            sleep 5
+          done
+          echo "Health check FAILED — site did not respond with 200 or 503 within 60s"
+          exit 1

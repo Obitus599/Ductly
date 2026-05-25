@@ -12,6 +12,7 @@ interface BookingRow {
   created_at: string;
   customer_id: string;
   team_id: string | null;
+  is_test_data: boolean;
 }
 
 export async function GET(request: NextRequest) {
@@ -23,16 +24,20 @@ export async function GET(request: NextRequest) {
 
   const status = searchParams.get("status");
   const date = searchParams.get("date");
+  const includeTest = searchParams.get("include_test") === "1";
   const page = parseInt(searchParams.get("page") || "1");
   const limit = 20;
   const offset = (page - 1) * limit;
 
   let query = supabase
     .from("bookings")
-    .select("id, slot_start, slot_end, address, status, payment_intent_id, created_at, customer_id, team_id", { count: "exact" })
+    .select("id, slot_start, slot_end, address, status, payment_intent_id, created_at, customer_id, team_id, is_test_data", { count: "exact" })
     .order("slot_start", { ascending: false })
     .range(offset, offset + limit - 1);
 
+  if (!includeTest) {
+    query = query.eq("is_test_data", false);
+  }
   if (status) {
     query = query.eq("status", status);
   }

@@ -21,28 +21,39 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Verify token is valid by checking with Supabase
-    try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (supabaseUrl && serviceKey) {
-        const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            apikey: serviceKey,
-          },
-        });
+    // Verify token is valid by checking with Supabase. We deliberately
+    // FAIL CLOSED on errors: a transient Supabase outage must not turn
+    // a long-expired admin cookie into a valid session.
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) {
+      // Missing config — refuse rather than guess
+      const loginUrl = new URL("/admin/login", request.url);
+      return NextResponse.redirect(loginUrl);
+    }
 
-        if (!res.ok) {
-          // Token expired or invalid — redirect to login
-          const loginUrl = new URL("/admin/login", request.url);
-          const response = NextResponse.redirect(loginUrl);
-          response.cookies.set("admin-token", "", { maxAge: 0, path: "/" });
-          return response;
-        }
+    try {
+      const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: serviceKey,
+        },
+        signal: AbortSignal.timeout(5_000),
+      });
+
+      if (!res.ok) {
+        const loginUrl = new URL("/admin/login", request.url);
+        const response = NextResponse.redirect(loginUrl);
+        response.cookies.set("admin-token", "", { maxAge: 0, path: "/" });
+        return response;
       }
-    } catch {
-      // If verification fails, allow through (don't lock out on network errors)
+    } catch (err) {
+      // Network failure / timeout / abort — fail closed.
+      console.error("Admin token verification failed:", err);
+      const loginUrl = new URL("/admin/login", request.url);
+      const response = NextResponse.redirect(loginUrl);
+      response.cookies.set("admin-token", "", { maxAge: 0, path: "/" });
+      return response;
     }
   }
 

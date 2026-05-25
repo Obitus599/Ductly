@@ -34,6 +34,8 @@ export default function TeamsPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [pinging, setPinging] = useState<string | null>(null);
+  const [pingResult, setPingResult] = useState<{ teamId: string; ok: boolean; message: string } | null>(null);
 
   async function fetchTeams() {
     const res = await fetch("/api/admin/teams");
@@ -57,6 +59,39 @@ export default function TeamsPage() {
       prev.map((t) => (t.id === id ? { ...t, active: !active } : t))
     );
     setToggling(null);
+  }
+
+  async function testPing(teamId: string) {
+    setPinging(teamId);
+    setPingResult(null);
+    try {
+      const res = await fetch("/api/admin/teams/test-ping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_id: teamId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPingResult({
+          teamId,
+          ok: true,
+          message: `Test SMS sent (Twilio status: ${data.status})`,
+        });
+      } else {
+        const detail = data.twilio_message
+          ? `${data.error} — ${data.twilio_message}`
+          : data.error;
+        setPingResult({ teamId, ok: false, message: detail || "Failed" });
+      }
+    } catch (err) {
+      setPingResult({
+        teamId,
+        ok: false,
+        message: err instanceof Error ? err.message : "Network error",
+      });
+    } finally {
+      setPinging(null);
+    }
   }
 
   function formatTime(t: string) {
@@ -128,25 +163,59 @@ export default function TeamsPage() {
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  disabled={toggling === team.id}
-                  onClick={() => toggleTeam(team.id, team.active)}
-                  className="text-[13px] px-4 py-2 rounded-[10px] border-2 font-medium transition-all disabled:opacity-50"
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={pinging === team.id || !team.whatsapp_number}
+                    onClick={() => testPing(team.id)}
+                    className="text-[13px] px-4 py-2 rounded-[10px] border-2 font-medium transition-all disabled:opacity-50"
+                    style={{
+                      fontFamily: "var(--font-cta)",
+                      borderColor: "rgba(59,130,246,0.2)",
+                      color: "rgb(59,130,246)",
+                      background: "rgba(59,130,246,0.04)",
+                    }}
+                    title={
+                      team.whatsapp_number
+                        ? "Send a test SMS via Twilio to verify reachability"
+                        : "No phone number on file"
+                    }
+                  >
+                    {pinging === team.id ? "Sending…" : "Test ping"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={toggling === team.id}
+                    onClick={() => toggleTeam(team.id, team.active)}
+                    className="text-[13px] px-4 py-2 rounded-[10px] border-2 font-medium transition-all disabled:opacity-50"
+                    style={{
+                      fontFamily: "var(--font-cta)",
+                      borderColor: team.active
+                        ? "rgba(239,68,68,0.2)"
+                        : "rgba(34,197,94,0.2)",
+                      color: team.active ? "rgb(239,68,68)" : "rgb(34,197,94)",
+                      background: team.active
+                        ? "rgba(239,68,68,0.04)"
+                        : "rgba(34,197,94,0.04)",
+                    }}
+                  >
+                    {team.active ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
+              </div>
+
+              {pingResult && pingResult.teamId === team.id && (
+                <div
+                  className="mt-3 text-[12px] px-3 py-2 rounded-[8px]"
                   style={{
-                    fontFamily: "var(--font-cta)",
-                    borderColor: team.active
-                      ? "rgba(239,68,68,0.2)"
-                      : "rgba(34,197,94,0.2)",
-                    color: team.active ? "rgb(239,68,68)" : "rgb(34,197,94)",
-                    background: team.active
-                      ? "rgba(239,68,68,0.04)"
-                      : "rgba(34,197,94,0.04)",
+                    fontFamily: "var(--font-body)",
+                    background: pingResult.ok ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+                    color: pingResult.ok ? "rgb(34,160,84)" : "rgb(200,55,55)",
                   }}
                 >
-                  {team.active ? "Deactivate" : "Activate"}
-                </button>
-              </div>
+                  {pingResult.message}
+                </div>
+              )}
 
               {/* Schedule */}
               <div className="mt-5 flex flex-wrap gap-2">

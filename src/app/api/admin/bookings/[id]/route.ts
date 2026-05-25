@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 
 /**
  * GET /api/admin/bookings/[id]
@@ -86,6 +86,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const csrfError = requireSameOrigin(request);
+  if (csrfError) return csrfError;
   const authError = requireAdmin(request);
   if (authError) return authError;
 
@@ -133,6 +135,20 @@ export async function PATCH(
   if (body.team_id !== undefined) {
     const newTeamId = body.team_id as string | null;
 
+    // Refuse reassignment until the Stripe-webhook scheduling agent
+    // has made the initial assignment. Otherwise admin and agent can
+    // race and leave bookings.team_id out of sync with slot_locks.
+    // The agent typically finishes within 2 seconds of payment.
+    if (booking.team_id === null && newTeamId) {
+      return NextResponse.json(
+        {
+          error:
+            "Booking is still being auto-assigned. Try again in a moment.",
+        },
+        { status: 409 }
+      );
+    }
+
     if (newTeamId) {
       // Verify team exists and is active
       const { data: team } = await supabase
@@ -149,22 +165,26 @@ export async function PATCH(
 
     updates.team_id = newTeamId;
 
-    // Update slot lock
-    if (booking.team_id) {
+    // Slot lock: upsert by booking_id so we never produce duplicates
+    // even if the agent and admin race. Unique constraint on
+    // slot_locks(booking_id) enforces invariant at the DB level.
+    if (newTeamId && booking.slot_start) {
+      await supabase
+        .from("slot_locks")
+        .upsert(
+          {
+            team_id: newTeamId,
+            slot_start: booking.slot_start,
+            booking_id: id,
+          } as never,
+          { onConflict: "booking_id" }
+        );
+    } else {
+      // Clearing the team — remove the lock.
       await supabase
         .from("slot_locks")
         .delete()
         .eq("booking_id", id);
-    }
-
-    if (newTeamId && booking.slot_start) {
-      await supabase
-        .from("slot_locks")
-        .insert({
-          team_id: newTeamId,
-          slot_start: booking.slot_start,
-          booking_id: id,
-        } as never);
     }
   }
 
