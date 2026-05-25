@@ -18,6 +18,11 @@ vi.mock("@/utils/supabase/admin", () => ({
   }),
 }));
 
+vi.mock("@/lib/admin-auth", () => ({
+  requireAdmin: vi.fn().mockReturnValue(null),
+  requireSameOrigin: vi.fn().mockReturnValue(null),
+}));
+
 import { POST } from "@/app/api/admin/bookings/create/route";
 
 function makeRequest(body: Record<string, unknown>): NextRequest {
