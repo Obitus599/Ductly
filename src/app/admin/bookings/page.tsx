@@ -76,9 +76,9 @@ export default function BookingsPage() {
 
     const res = await fetch(`/api/admin/bookings?${params}`);
     const data = await res.json();
-    setBookings(data.bookings);
-    setTotal(data.total);
-    setPages(data.pages);
+    setBookings(data.bookings || []);
+    setTotal(data.total || 0);
+    setPages(data.pages || 1);
     setLoading(false);
   }, [page, statusFilter, dateFilter]);
 

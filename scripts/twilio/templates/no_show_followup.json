@@ -7,7 +7,7 @@
   },
   "types": {
     "twilio/text": {
-      "body": "Hi {{1}}, our team arrived for your scheduled duct cleaning at {{2}} but wasn't able to reach you. We'd love to reschedule — visit ductly.ae/book to pick a new time."
+      "body": "Hi {{1}}, our team arrived for your scheduled duct cleaning at {{2}} but wasn't able to reach you. We'd love to reschedule - visit ductly.ae/book to pick a new time."
     }
   }
 }

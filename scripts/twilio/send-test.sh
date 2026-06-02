@@ -16,7 +16,7 @@ set -euo pipefail
 : "${TWILIO_CONTENT_SID_BOOKING_CONFIRMED:?Set TWILIO_CONTENT_SID_BOOKING_CONFIRMED after templates are created}"
 
 TO="${1:?Usage: send-test.sh +971501234567}"
-FROM="${TWILIO_WHATSAPP_FROM:-whatsapp:+971541610793}"
+FROM="${TWILIO_WHATSAPP_FROM:-whatsapp:+15559870195}"
 AUTH="${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}"
 
 VARIABLES='{"1":"Mattia","2":"2026-05-20T15:00:00+04:00","3":"Test Address, Dubai","4":"AED 1"}'

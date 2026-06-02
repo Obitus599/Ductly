@@ -80,7 +80,7 @@ export default function PrivacyPolicyPage() {
               <li><strong>Stripe (Ireland):</strong> Payment processing — receives name, email, phone, billing address (PCI DSS compliant)</li>
               <li><strong>Supabase (AWS, EU):</strong> Database and authentication hosting — stores all booking and customer records</li>
               <li><strong>Google (Maps Platform):</strong> Address geocoding, autocomplete, and travel-time calculation — receives the service address you enter</li>
-              <li><strong>360dialog (Germany):</strong> WhatsApp Business API provider that delivers booking confirmations and reminders — receives your phone number and the message contents. We expect to migrate to Twilio (USA) in 2026; this notice will be updated when the migration completes.</li>
+              <li><strong>Twilio (USA):</strong> WhatsApp Business API provider that delivers booking confirmations and reminders — receives your phone number and the message contents.</li>
               <li><strong>n8n (self-hosted by Ductly):</strong> Internal workflow automation that dispatches teams and triggers notifications — processes booking data on our infrastructure</li>
               <li><strong>OpenRouter (USA):</strong> LLM provider used for two distinct purposes. (1) Team-assignment optimisation: receives anonymised booking metadata only — no name, email, or phone. (2) Customer support chatbot on our landing page: receives the free-form messages you type into the chat widget along with the conversation history of that session. Do not paste sensitive personal information into the chatbot.</li>
             </ul>

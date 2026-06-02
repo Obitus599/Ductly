@@ -99,3 +99,40 @@ export async function PATCH(request: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+/**
+ * POST /api/admin/teams
+ * Create a new team.
+ * Body: { name: string, whatsapp_number?: string }
+ */
+export async function POST(request: NextRequest) {
+  const csrfError = requireSameOrigin(request);
+  if (csrfError) return csrfError;
+  const authError = requireAdmin(request);
+  if (authError) return authError;
+
+  const supabase = supabaseAdmin;
+  const body = await request.json();
+  const { name, whatsapp_number } = body;
+
+  if (!name || typeof name !== "string" || name.trim().length === 0) {
+    return NextResponse.json({ error: "Team name is required." }, { status: 400 });
+  }
+
+  const { data, error } = await supabase
+    .from("teams")
+    .insert({
+      name: name.trim(),
+      whatsapp_number: typeof whatsapp_number === "string" ? whatsapp_number.trim() || null : null,
+      active: true,
+    } as never)
+    .select("id, name, whatsapp_number, active, created_at")
+    .returns<TeamRow[]>()
+    .single();
+
+  if (error || !data) {
+    return NextResponse.json({ error: error?.message || "Failed to create team." }, { status: 500 });
+  }
+
+  return NextResponse.json({ team: data });
+}

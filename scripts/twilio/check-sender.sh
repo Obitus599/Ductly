@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Query Twilio's view of the WhatsApp sender for +971541610793.
+# Query Twilio's view of the WhatsApp sender for +15559870195.
 # Useful for the support reply to Twilio ("your API reports state X").
 #
 # Requires:

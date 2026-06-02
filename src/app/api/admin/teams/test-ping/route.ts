@@ -31,12 +31,12 @@ export async function POST(request: NextRequest) {
 
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_SMS_FROM;
+  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
   if (!sid || !token || !fromNumber) {
     return NextResponse.json(
       {
         error:
-          "Twilio not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_SMS_FROM.",
+          "Twilio not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM.",
       },
       { status: 503 }
     );

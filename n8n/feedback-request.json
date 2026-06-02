@@ -79,23 +79,32 @@
     },
     {
       "parameters": {
-        "url": "https://waba.360dialog.io/v1/messages",
-        "sendHeaders": true,
-        "headerParameters": {
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ $env.TWILIO_ACCOUNT_SID }}/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
           "parameters": [
-            { "name": "D360-API-KEY", "value": "={{ $env.WABA_API_KEY }}" }
+            { "name": "From", "value": "={{ $env.TWILIO_WHATSAPP_FROM }}" },
+            { "name": "To", "value": "=whatsapp:{{ $json.customer_phone.replace(/[^0-9+]/g, '') }}" },
+            { "name": "ContentSid", "value": "={{ $env.TWILIO_CONTENT_SID_FEEDBACK_REQUEST }}" },
+            { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.customer_name,\n  '2': $json.team_name || 'our team'\n}) }}" }
           ]
         },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.customer_phone.replace(/[^0-9]/g, '') }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"feedback_request\",\n    \"language\": { \"code\": \"en\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": \"{{ $json.customer_name }}\" },\n          { \"type\": \"text\", \"text\": \"{{ $json.team_name || 'our team' }}\" }\n        ]\n      }\n    ]\n  }\n}",
         "options": {}
       },
       "id": "whatsapp-feedback",
       "name": "WhatsApp: Feedback Request",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 120]
+      "position": [900, 120],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "CONFIGURE_ME",
+          "name": "Twilio Basic Auth (Account SID / Auth Token)"
+        }
+      }
     },
     {
       "parameters": {

@@ -36,11 +36,16 @@ export default function TeamsPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [pinging, setPinging] = useState<string | null>(null);
   const [pingResult, setPingResult] = useState<{ teamId: string; ok: boolean; message: string } | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newWhatsapp, setNewWhatsapp] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState("");
 
   async function fetchTeams() {
     const res = await fetch("/api/admin/teams");
     const data = await res.json();
-    setTeams(data.teams);
+    setTeams(data.teams || []);
     setLoading(false);
   }
 
@@ -94,6 +99,39 @@ export default function TeamsPage() {
     }
   }
 
+  async function addTeam(e: React.FormEvent) {
+    e.preventDefault();
+    if (adding) return;
+    setAdding(true);
+    setAddError("");
+    try {
+      const res = await fetch("/api/admin/teams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newName.trim(),
+          whatsapp_number: newWhatsapp.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAddError(data.error || "Failed to add team.");
+        return;
+      }
+      setTeams((prev) => [
+        ...prev,
+        { ...data.team, schedules: [], bookings_this_week: 0, bookings_this_month: 0 },
+      ]);
+      setNewName("");
+      setNewWhatsapp("");
+      setShowAdd(false);
+    } catch {
+      setAddError("Network error.");
+    } finally {
+      setAdding(false);
+    }
+  }
+
   function formatTime(t: string) {
     const [h, m] = t.split(":");
     const hour = parseInt(h);
@@ -115,6 +153,80 @@ export default function TeamsPage() {
 
   return (
     <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2
+          className="text-[18px] font-normal tracking-[-0.03em]"
+          style={{ fontFamily: "var(--font-heading)", color: "rgb(61,61,61)" }}
+        >
+          Teams ({teams.length})
+        </h2>
+        <button
+          type="button"
+          onClick={() => setShowAdd(!showAdd)}
+          className="text-[13px] font-medium px-4 py-2 rounded-full text-white transition-all hover:brightness-110"
+          style={{
+            fontFamily: "var(--font-cta)",
+            background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))",
+          }}
+        >
+          {showAdd ? "Cancel" : "Add Team"}
+        </button>
+      </div>
+
+      {showAdd && (
+        <form onSubmit={addTeam} className="p-5 mb-5" style={CARD}>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                className="block text-[13px] font-medium text-[rgb(80,85,95)] mb-1.5"
+                style={{ fontFamily: "var(--font-body)" }}
+              >
+                Name *
+              </label>
+              <input
+                className="w-full rounded-[12px] border-2 border-[rgb(230,230,230)] bg-white px-4 py-3 text-[14px] text-[rgb(61,61,61)] placeholder:text-[rgb(185,185,185)] focus:border-[rgb(147,216,216)] focus:outline-none transition-colors"
+                style={{ fontFamily: "var(--font-body)" }}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Team name"
+                required
+              />
+            </div>
+            <div>
+              <label
+                className="block text-[13px] font-medium text-[rgb(80,85,95)] mb-1.5"
+                style={{ fontFamily: "var(--font-body)" }}
+              >
+                WhatsApp Number
+              </label>
+              <input
+                className="w-full rounded-[12px] border-2 border-[rgb(230,230,230)] bg-white px-4 py-3 text-[14px] text-[rgb(61,61,61)] placeholder:text-[rgb(185,185,185)] focus:border-[rgb(147,216,216)] focus:outline-none transition-colors"
+                style={{ fontFamily: "var(--font-body)" }}
+                value={newWhatsapp}
+                onChange={(e) => setNewWhatsapp(e.target.value)}
+                placeholder="+917042009519"
+              />
+            </div>
+          </div>
+          {addError && (
+            <p className="text-[13px] mt-3" style={{ fontFamily: "var(--font-body)", color: "rgb(239,68,68)" }}>
+              {addError}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={!newName.trim() || adding}
+            className="mt-4 px-6 py-2.5 rounded-full text-[14px] font-medium text-white transition-all disabled:opacity-40"
+            style={{
+              fontFamily: "var(--font-cta)",
+              background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))",
+            }}
+          >
+            {adding ? "Adding..." : "Create Team"}
+          </button>
+        </form>
+      )}
+
       <div className="grid gap-4">
         {teams.map((team) => {
           const activeDays = team.schedules

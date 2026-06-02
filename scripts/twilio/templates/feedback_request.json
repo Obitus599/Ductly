@@ -7,7 +7,7 @@
   },
   "types": {
     "twilio/text": {
-      "body": "Hi {{1}}, thank you for choosing DUCTly! We hope {{2}} did a great job. We'd love your feedback — please rate your experience using the link in your email."
+      "body": "Hi {{1}}, thank you for choosing DUCTly! We hope {{2}} did a great job. We'd love your feedback - please rate your experience using the link in your email."
     }
   }
 }
