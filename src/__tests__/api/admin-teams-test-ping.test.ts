@@ -41,7 +41,7 @@ describe("POST /api/admin/teams/test-ping", () => {
     vi.clearAllMocks();
     delete process.env.TWILIO_ACCOUNT_SID;
     delete process.env.TWILIO_AUTH_TOKEN;
-    delete process.env.TWILIO_SMS_FROM;
+    delete process.env.TWILIO_WHATSAPP_FROM;
   });
 
   it("returns 400 when team_id is missing", async () => {
@@ -72,7 +72,7 @@ describe("POST /api/admin/teams/test-ping", () => {
   it("returns 404 when team does not exist", async () => {
     process.env.TWILIO_ACCOUNT_SID = "ACxxx";
     process.env.TWILIO_AUTH_TOKEN = "tok";
-    process.env.TWILIO_SMS_FROM = "+15551234567";
+    process.env.TWILIO_WHATSAPP_FROM = "+15551234567";
     mockTeamLookup(null);
 
     const { POST } = await import("@/app/api/admin/teams/test-ping/route");
@@ -83,7 +83,7 @@ describe("POST /api/admin/teams/test-ping", () => {
   it("returns 400 when team has no phone number", async () => {
     process.env.TWILIO_ACCOUNT_SID = "ACxxx";
     process.env.TWILIO_AUTH_TOKEN = "tok";
-    process.env.TWILIO_SMS_FROM = "+15551234567";
+    process.env.TWILIO_WHATSAPP_FROM = "+15551234567";
     mockTeamLookup({ id: "t1", name: "Alpha", whatsapp_number: "" });
 
     const { POST } = await import("@/app/api/admin/teams/test-ping/route");
@@ -96,7 +96,7 @@ describe("POST /api/admin/teams/test-ping", () => {
   it("forwards Twilio failures with detail", async () => {
     process.env.TWILIO_ACCOUNT_SID = "ACxxx";
     process.env.TWILIO_AUTH_TOKEN = "tok";
-    process.env.TWILIO_SMS_FROM = "+15551234567";
+    process.env.TWILIO_WHATSAPP_FROM = "+15551234567";
     mockTeamLookup({ id: "t1", name: "Alpha", whatsapp_number: "+971501234567" });
 
     const mockFetch = vi.fn().mockResolvedValue({
@@ -117,7 +117,7 @@ describe("POST /api/admin/teams/test-ping", () => {
   it("returns success when Twilio accepts the send", async () => {
     process.env.TWILIO_ACCOUNT_SID = "ACxxx";
     process.env.TWILIO_AUTH_TOKEN = "tok";
-    process.env.TWILIO_SMS_FROM = "+15551234567";
+    process.env.TWILIO_WHATSAPP_FROM = "+15551234567";
     mockTeamLookup({ id: "t1", name: "Alpha", whatsapp_number: "+971501234567" });
 
     const mockFetch = vi.fn().mockResolvedValue({
