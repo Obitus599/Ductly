@@ -236,6 +236,8 @@ export async function POST(request: NextRequest) {
         metadata: {
           booking_id: booking.id,
           customer_id: customer.id,
+          customer_phone,
+          customer_name,
           session_id,
           slot_start,
           address,
