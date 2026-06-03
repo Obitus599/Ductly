@@ -120,9 +120,9 @@ export async function POST(request: NextRequest) {
           `Team assignment: ${result.teamId} via ${result.method} for booking ${bookingId}`
         );
 
-        // 3b. Trigger n8n team dispatch webhook (skipped for test-mode bookings)
+        // 3b. Trigger n8n team dispatch webhook
         const n8nDispatchUrl = process.env.N8N_WEBHOOK_TEAM_DISPATCH;
-        if (n8nDispatchUrl && result.teamId && !isTestData) {
+        if (n8nDispatchUrl && result.teamId) {
           const { data: teamData } = await supabase
             .from("teams")
             .select("name, whatsapp_number")
@@ -201,9 +201,9 @@ export async function POST(request: NextRequest) {
         } as never);
       }
 
-      // 4. Trigger n8n webhook for booking confirmation (skipped for test-mode bookings)
+      // 4. Trigger n8n webhook for booking confirmation
       const n8nBookingUrl = process.env.N8N_WEBHOOK_BOOKING_CONFIRMED;
-      if (n8nBookingUrl && !isTestData) {
+      if (n8nBookingUrl) {
         // Fetch full booking + customer for n8n payload
         const { data: fullBooking } = await supabase
           .from("bookings")
@@ -265,9 +265,9 @@ export async function POST(request: NextRequest) {
         payload: { booking_id: bookingId, payment_intent_id: paymentIntent.id },
       } as never);
 
-      // 4. Trigger n8n webhook for payment failure notification (skip on test events)
+      // 4. Trigger n8n webhook for payment failure notification
       const n8nFailureUrl = process.env.N8N_WEBHOOK_PAYMENT_FAILED;
-      if (n8nFailureUrl && event.livemode) {
+      if (n8nFailureUrl) {
         fireN8nWebhook("payment_failed", n8nFailureUrl, {
           event: "payment_failed",
           booking_id: bookingId ?? "",
