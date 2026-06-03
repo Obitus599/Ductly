@@ -223,7 +223,11 @@ CREATE TRIGGER trg_team_schedules_updated_at
 -- ============================================================
 
 -- View: team_workloads - booking counts per team per week/month
-CREATE OR REPLACE VIEW team_workloads AS
+-- security_invoker = true enforces RLS as the calling user, not as
+-- the view creator (avoids Supabase linter ERROR 0010).
+CREATE OR REPLACE VIEW team_workloads
+  WITH (security_invoker = true)
+AS
 SELECT
   t.id AS team_id,
   t.name AS team_name,
@@ -243,7 +247,10 @@ WHERE t.active = true
 GROUP BY t.id, t.name;
 
 -- View: feedback_summary - average rating per team per month
-CREATE OR REPLACE VIEW feedback_summary AS
+-- security_invoker = true enforces RLS as the calling user.
+CREATE OR REPLACE VIEW feedback_summary
+  WITH (security_invoker = true)
+AS
 SELECT
   t.id AS team_id,
   t.name AS team_name,

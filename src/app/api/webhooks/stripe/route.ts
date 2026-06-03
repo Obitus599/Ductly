@@ -130,26 +130,59 @@ export async function POST(request: NextRequest) {
             .returns<{ name: string; whatsapp_number: string }[]>()
             .single();
 
-          const { data: bookingData } = await supabase
+          const { data: bookingData, error: bookingDataErr } = await supabase
             .from("bookings")
             .select("customer_id, address_details, slot_end")
             .eq("id", bookingId)
             .returns<{ customer_id: string; address_details: Record<string, unknown> | null; slot_end: string }[]>()
             .single();
+          if (bookingDataErr) {
+            console.error(`[team_dispatch] bookings select failed for ${bookingId}:`, bookingDataErr.message);
+          }
 
           let dispatchCustomerName = "";
           let dispatchCustomerPhone = "";
           if (bookingData?.customer_id) {
-            const { data: dispatchCustomer } = await supabase
+            const { data: dispatchCustomer, error: dispatchCustomerErr } = await supabase
               .from("customers")
               .select("name, phone")
               .eq("id", bookingData.customer_id)
               .returns<{ name: string; phone: string }[]>()
               .single();
+            if (dispatchCustomerErr) {
+              console.error(`[team_dispatch] customers select failed for ${bookingData.customer_id}:`, dispatchCustomerErr.message);
+            }
             if (dispatchCustomer) {
               dispatchCustomerName = dispatchCustomer.name;
               dispatchCustomerPhone = dispatchCustomer.phone;
             }
+          }
+
+          // Same fallback ladder as the booking_confirmed branch:
+          //   metadata.customer_phone → Stripe session.customer_details.phone
+          if (!dispatchCustomerPhone && metadata.customer_phone) {
+            console.warn(
+              `[team_dispatch] DB phone empty for ${bookingId}; falling back to Stripe metadata phone`
+            );
+            dispatchCustomerPhone = metadata.customer_phone;
+          }
+          if (!dispatchCustomerName && metadata.customer_name) {
+            dispatchCustomerName = metadata.customer_name;
+          }
+          if (!dispatchCustomerPhone) {
+            const sessionPhone =
+              (session.customer_details as { phone?: string } | null)?.phone ?? "";
+            if (sessionPhone) {
+              console.warn(
+                `[team_dispatch] DB + metadata phone empty for ${bookingId}; using Stripe session phone`
+              );
+              dispatchCustomerPhone = sessionPhone;
+            }
+          }
+          if (!dispatchCustomerPhone) {
+            console.error(
+              `[team_dispatch] No phone resolved for booking ${bookingId} (customer_id=${bookingData?.customer_id ?? "null"}).`
+            );
           }
 
           const addrDetails = bookingData?.address_details as Record<string, unknown> | null;
@@ -219,26 +252,66 @@ export async function POST(request: NextRequest) {
       const n8nBookingUrl = process.env.N8N_WEBHOOK_BOOKING_CONFIRMED;
       if (n8nBookingUrl) {
         // Fetch customer phone explicitly (Supabase join may not resolve)
-        const { data: bookingRow } = await supabase
+        const { data: bookingRow, error: bookingRowErr } = await supabase
           .from("bookings")
           .select("customer_id, slot_end, address_details, team_id")
           .eq("id", bookingId)
           .returns<{ customer_id: string; slot_end: string; address_details: Record<string, unknown> | null; team_id: string | null }[]>()
           .single();
+        if (bookingRowErr) {
+          console.error(`[booking_confirmed] bookings select failed for ${bookingId}:`, bookingRowErr.message);
+        }
 
         let customerPhone = "";
         let customerName = "";
         if (bookingRow?.customer_id) {
-          const { data: customerRow } = await supabase
+          const { data: customerRow, error: customerRowErr } = await supabase
             .from("customers")
             .select("name, phone")
             .eq("id", bookingRow.customer_id)
             .returns<{ name: string; phone: string }[]>()
             .single();
+          if (customerRowErr) {
+            console.error(`[booking_confirmed] customers select failed for ${bookingRow.customer_id}:`, customerRowErr.message);
+          }
           if (customerRow) {
             customerName = customerRow.name;
             customerPhone = customerRow.phone;
           }
+        }
+
+        // Fallback 1: Stripe metadata captured at checkout time. This
+        // is the form-entered phone, so it's the highest-fidelity source
+        // and survives any customers table issues (rename, null, etc).
+        if (!customerPhone && metadata.customer_phone) {
+          console.warn(
+            `[booking_confirmed] DB phone empty for booking ${bookingId}; falling back to Stripe metadata phone`
+          );
+          customerPhone = metadata.customer_phone;
+        }
+        if (!customerName && metadata.customer_name) {
+          customerName = metadata.customer_name;
+        }
+
+        // Fallback 2: Stripe-collected customer_details.phone, if
+        // phone_number_collection ever gets enabled on the Checkout.
+        if (!customerPhone) {
+          const sessionPhone =
+            (session.customer_details as { phone?: string } | null)?.phone ?? "";
+          if (sessionPhone) {
+            console.warn(
+              `[booking_confirmed] DB + metadata phone empty for ${bookingId}; using Stripe session phone`
+            );
+            customerPhone = sessionPhone;
+          }
+        }
+
+        // Final diagnostic if we STILL have nothing — n8n will skip
+        // the WhatsApp branch and the error_log row gives us a record.
+        if (!customerPhone) {
+          console.error(
+            `[booking_confirmed] No phone resolved for booking ${bookingId} (customer_id=${bookingRow?.customer_id ?? "null"}). WhatsApp will be skipped.`
+          );
         }
 
         fireN8nWebhook("booking_confirmed", n8nBookingUrl, {
