@@ -196,8 +196,11 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
     // Autocomplete
     const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
       componentRestrictions: { country: "ae" },
-      fields: ["formatted_address", "geometry", "place_id", "address_components"],
-      types: ["address"],
+      fields: ["formatted_address", "geometry", "place_id", "address_components", "name", "types"],
+      // No `types` restriction: returning all prediction kinds lets users
+      // find named buildings/towers (establishments) and POIs, not just
+      // street addresses — important in UAE where most homes are in named
+      // towers without a precise street number.
     });
 
     autocomplete.addListener("place_changed", () => {
@@ -221,9 +224,23 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
       map.setCenter({ lat, lng });
       map.setZoom(16);
 
+      // If the user picked a named building/establishment (e.g. a tower),
+      // autofill the building name field. Plain street addresses have no
+      // meaningful `name` distinct from the street, so we only autofill
+      // for establishment/premise/POI results.
+      const placeTypes = place.types || [];
+      const isBuilding = placeTypes.some((t) =>
+        ["establishment", "premise", "point_of_interest"].includes(t)
+      );
+      const autoBuilding =
+        isBuilding && place.name && place.name !== place.formatted_address
+          ? place.name
+          : valueRef.current.building_name;
+
       onChangeRef.current({
         ...valueRef.current,
         formatted_address: place.formatted_address || "",
+        building_name: autoBuilding,
         lat,
         lng,
         place_id: place.place_id || "",
