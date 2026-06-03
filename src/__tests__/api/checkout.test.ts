@@ -202,8 +202,8 @@ describe("POST /api/checkout", () => {
   it("calculates correct price for elite plan", async () => {
     await POST(makeRequest({ ...VALID_BODY, plan: "elite", thermostats: 1 }));
     const [createArgs] = mockStripeCreate.mock.calls[0];
-    // elite (699) × 1 = 699 AED = 69900 fils
-    expect(createArgs.line_items[0].price_data.unit_amount).toBe(69900);
+    // elite (649) × 1 = 649 AED = 64900 fils
+    expect(createArgs.line_items[0].price_data.unit_amount).toBe(64900);
   });
 
   it("returns 500 when customer upsert fails", async () => {

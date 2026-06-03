@@ -54,7 +54,7 @@ export default function TermsOfServicePage() {
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Essential Plan (AED 349/thermostat):</strong> Standard duct cleaning with inspection report.</li>
               <li><strong>Signature Plan (AED 549/thermostat):</strong> Deep cleaning with sanitization and before/after documentation.</li>
-              <li><strong>Elite Plan (AED 699/thermostat):</strong> Premium service including mold treatment, coil cleaning, and extended warranty.</li>
+              <li><strong>Elite Plan (AED 649/thermostat):</strong> Premium service including mold treatment, coil cleaning, and extended warranty.</li>
             </ul>
           </section>
 

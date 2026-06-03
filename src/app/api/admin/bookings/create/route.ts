@@ -3,6 +3,8 @@ import crypto from "crypto";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 import { assignTeamToBooking } from "@/lib/scheduling-agent";
+import { fireN8nWebhook } from "@/lib/n8n";
+import { buildMapsLink, formatSlotForDispatch, addressQuality } from "@/lib/dispatch-format";
 import { UAE_TZ_SUFFIX } from "@/lib/slot-helpers";
 import { ADMIN_RECORDED_CONSENT_VERSION } from "@/lib/consent";
 
@@ -10,7 +12,7 @@ import { ADMIN_RECORDED_CONSENT_VERSION } from "@/lib/consent";
 const PLAN_CONFIG: Record<string, { rate: number; setupMins: number; perThermostatMins: number }> = {
   essential: { rate: 349, setupMins: 45, perThermostatMins: 45 },
   signature: { rate: 549, setupMins: 80, perThermostatMins: 45 },
-  elite:     { rate: 699, setupMins: 80, perThermostatMins: 60 },
+  elite:     { rate: 649, setupMins: 80, perThermostatMins: 60 },
 };
 
 /**
@@ -250,6 +252,59 @@ export async function POST(request: NextRequest) {
       error_message: err instanceof Error ? err.message : "Unknown error",
       payload: { booking_id: booking.id },
     } as never);
+  }
+
+  // 4. Immediately notify the assigned team (manual bookings have no Stripe
+  //    webhook, so the team-dispatch must fire from here). Mirrors the
+  //    dispatch payload built in /api/webhooks/stripe.
+  const n8nDispatchUrl = process.env.N8N_WEBHOOK_TEAM_DISPATCH;
+  if (n8nDispatchUrl && teamResult.teamId) {
+    const { data: teamData } = await supabase
+      .from("teams")
+      .select("name, whatsapp_number")
+      .eq("id", teamResult.teamId)
+      .returns<{ name: string; whatsapp_number: string }[]>()
+      .single();
+
+    const addrDetails = (address_details || null) as Record<string, unknown> | null;
+    const priceAed = planCfg.rate * thermostatCount;
+
+    // PDPL: record that customer PII was shared with this team.
+    supabase
+      .from("team_data_access")
+      .insert({
+        team_id: teamResult.teamId,
+        booking_id: booking.id,
+        shared_fields: ["customer_name", "customer_phone", "address"],
+        channel: "n8n_team_dispatch",
+      } as never)
+      .then(({ error }) => {
+        if (error) console.warn("team_data_access insert failed:", error.message);
+      });
+
+    fireN8nWebhook("team_dispatch", n8nDispatchUrl, {
+      event: "team_dispatch",
+      booking_id: booking.id,
+      team_id: teamResult.teamId,
+      team_name: teamData?.name || "",
+      team_whatsapp: teamData?.whatsapp_number || "",
+      customer_name: customer_name,
+      customer_phone: customer_phone,
+      address: address || "",
+      address_quality: addressQuality(addrDetails),
+      maps_link: buildMapsLink(addrDetails, address || ""),
+      building_name: addrDetails?.building_name || "",
+      flat_number: addrDetails?.flat_number || "",
+      floor: addrDetails?.floor || "",
+      additional_directions: addrDetails?.additional_directions || "",
+      slot_start,
+      slot_start_human: formatSlotForDispatch(slot_start),
+      slot_end: computedSlotEnd,
+      slot_end_human: formatSlotForDispatch(computedSlotEnd),
+      plan,
+      price_aed: String(priceAed),
+      source: "manual_admin_booking",
+    });
   }
 
   return NextResponse.json({

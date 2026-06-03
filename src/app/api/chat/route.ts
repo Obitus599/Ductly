@@ -38,7 +38,7 @@ PLANS & PRICING (all prices in AED per thermostat):
    Full medical-grade sanitization and restoration.
    Includes: TurboClean, Filter cleaning, Fan coil unit cleaning, Fumigation, Bio-enzyme disinfection, Mold remediation treatment, Black mold remediation
 
-3. Elite — 699 AED/thermostat
+3. Elite — 649 AED/thermostat
    Ultimate protection with 12-month air purity guarantee.
    Includes: Everything in Signature + AC unit coil deep clean, Air quality analysis
 

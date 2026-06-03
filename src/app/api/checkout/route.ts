@@ -11,7 +11,7 @@ import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
 const PLAN_CONFIG: Record<string, { rate: number; setupMins: number; perThermostatMins: number }> = {
   essential: { rate: 349, setupMins: 45, perThermostatMins: 45 },
   signature: { rate: 549, setupMins: 80, perThermostatMins: 45 },
-  elite:     { rate: 699, setupMins: 80, perThermostatMins: 60 },
+  elite:     { rate: 649, setupMins: 80, perThermostatMins: 60 },
 };
 
 /**

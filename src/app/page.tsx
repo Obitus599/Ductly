@@ -296,7 +296,7 @@ const processIcons = [
 ];
 
 const processSteps = [
-  { num: "01", title: "Residential Air Duct Cleaning", desc: "We treat your home with the utmost respect. Our powerful, truck-mounted vacuums and specialized agitation tools remove years of buildup from your entire ductwork system, ensuring a safer environment for your family.", img: "/images/process-1.png" },
+  { num: "01", title: "Residential Air Duct Cleaning", desc: "Your home deserves clean, healthy air. We deep-clean your entire duct system — clearing out the dust, allergens, and debris that build up over the years — so every room breathes fresher and your AC runs more efficiently.", img: "/images/process-1.png" },
   { num: "02", title: "Commercial Air Duct Cleaning", desc: "A clean workplace is a productive workplace. We help businesses improve indoor air quality for employees and customers, helping you meet health and safety standards while reducing facility energy costs.", img: "/images/process-2.png" },
   { num: "03", title: "Mold Elimination", desc: "Mold growth can damage your home and harm your health. Our professional mold cleaning service removes hazardous mold buildup, restores healthy air quality, and protects your home from recurring problems.", img: "/images/process.png" },
 ];
@@ -375,7 +375,7 @@ const plans = [
     features: ["TurboClean\u2122", "Filter cleaning", "Fan coil unit cleaning", "Fumigation", "Bio-enzyme disinfection", "Mold remediation treatment", "Black mold remediation"],
   },
   {
-    name: "Elite", price: "699", tagline: "Ultimate protection with 12-month air purity guarantee.",
+    name: "Elite", price: "649", tagline: "Ultimate protection with 12-month air purity guarantee.",
     cta: "Select Elite", best: false,
     features: ["TurboClean\u2122", "Filter cleaning", "Fan coil unit cleaning", "Fumigation", "Bio-enzyme disinfection", "Mold remediation treatment", "Black mold remediation", "AC unit coil deep clean", "Air quality analysis"],
   },
@@ -752,7 +752,8 @@ export default function Home() {
       <Navbar />
       <main id="main">
         <HeroSection />
-        <LogoMarquee />
+        {/* "Trusted by the leaders" logo marquee hidden for now (placeholder logos). Re-enable when real partner logos are ready. */}
+        {/* <LogoMarquee /> */}
         <FeaturesSection />
         <ProcessSection />
         <PricingSection />
