@@ -132,12 +132,26 @@ export async function POST(request: NextRequest) {
 
           const { data: bookingData } = await supabase
             .from("bookings")
-            .select("address_details, slot_end, customers(name, phone)")
+            .select("customer_id, address_details, slot_end")
             .eq("id", bookingId)
-            .returns<Record<string, unknown>[]>()
+            .returns<{ customer_id: string; address_details: Record<string, unknown> | null; slot_end: string }[]>()
             .single();
 
-          const customerInfo = bookingData?.customers as Record<string, unknown> | null;
+          let dispatchCustomerName = "";
+          let dispatchCustomerPhone = "";
+          if (bookingData?.customer_id) {
+            const { data: dispatchCustomer } = await supabase
+              .from("customers")
+              .select("name, phone")
+              .eq("id", bookingData.customer_id)
+              .returns<{ name: string; phone: string }[]>()
+              .single();
+            if (dispatchCustomer) {
+              dispatchCustomerName = dispatchCustomer.name;
+              dispatchCustomerPhone = dispatchCustomer.phone;
+            }
+          }
+
           const addrDetails = bookingData?.address_details as Record<string, unknown> | null;
 
           const mapsLink = buildMapsLink(addrDetails, address || "");
@@ -170,8 +184,8 @@ export async function POST(request: NextRequest) {
             team_id: result.teamId,
             team_name: teamData?.name || "",
             team_whatsapp: teamData?.whatsapp_number || "",
-            customer_name: customerInfo?.name || "",
-            customer_phone: customerInfo?.phone || "",
+            customer_name: dispatchCustomerName,
+            customer_phone: dispatchCustomerPhone,
             address: address || "",
             address_quality: quality,
             maps_link: mapsLink,
@@ -204,25 +218,40 @@ export async function POST(request: NextRequest) {
       // 4. Trigger n8n webhook for booking confirmation
       const n8nBookingUrl = process.env.N8N_WEBHOOK_BOOKING_CONFIRMED;
       if (n8nBookingUrl) {
-        // Fetch full booking + customer for n8n payload
-        const { data: fullBooking } = await supabase
+        // Fetch customer phone explicitly (Supabase join may not resolve)
+        const { data: bookingRow } = await supabase
           .from("bookings")
-          .select("*, customers(*)")
+          .select("customer_id, slot_end, address_details, team_id")
           .eq("id", bookingId)
-          .returns<Record<string, unknown>[]>()
+          .returns<{ customer_id: string; slot_end: string; address_details: Record<string, unknown> | null; team_id: string | null }[]>()
           .single();
+
+        let customerPhone = "";
+        let customerName = "";
+        if (bookingRow?.customer_id) {
+          const { data: customerRow } = await supabase
+            .from("customers")
+            .select("name, phone")
+            .eq("id", bookingRow.customer_id)
+            .returns<{ name: string; phone: string }[]>()
+            .single();
+          if (customerRow) {
+            customerName = customerRow.name;
+            customerPhone = customerRow.phone;
+          }
+        }
 
         fireN8nWebhook("booking_confirmed", n8nBookingUrl, {
           event: "booking_confirmed",
           booking_id: bookingId,
-          customer_name: fullBooking?.customers && typeof fullBooking.customers === "object" ? (fullBooking.customers as Record<string, unknown>).name : metadata.customer_id,
+          customer_name: customerName || session.customer_email || "",
           customer_email: session.customer_email,
-          customer_phone: fullBooking?.customers && typeof fullBooking.customers === "object" ? (fullBooking.customers as Record<string, unknown>).phone : "",
+          customer_phone: customerPhone,
           address: address || "",
-          address_details: fullBooking?.address_details || null,
+          address_details: bookingRow?.address_details || null,
           slot_start: slotStart,
-          slot_end: fullBooking?.slot_end || "",
-          team_id: fullBooking?.team_id || null,
+          slot_end: bookingRow?.slot_end || "",
+          team_id: bookingRow?.team_id || null,
           plan: metadata.plan || "",
           price_aed: metadata.price_aed || "",
           manage_token: manageToken,
