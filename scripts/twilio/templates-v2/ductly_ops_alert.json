@@ -1,0 +1,17 @@
+{
+  "friendly_name": "ductly_ops_alert",
+  "language": "en",
+  "variables": {
+    "1": "New Booking",
+    "2": "Ahmed",
+    "3": "Tue 21 Apr, 10:00 AM",
+    "4": "Dubai Marina, Tower 5",
+    "5": "Team Alpha",
+    "6": "Signature · AED 2,196"
+  },
+  "types": {
+    "twilio/text": {
+      "body": "Ductly · {{1}}\n\nCustomer: {{2}}\nWhen: {{3}}\nWhere: {{4}}\nTeam: {{5}}\n\n{{6}}"
+    }
+  }
+}

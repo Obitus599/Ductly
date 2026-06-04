@@ -1,0 +1,18 @@
+{
+  "friendly_name": "ductly_invoice",
+  "language": "en",
+  "variables": {
+    "1": "Ahmed",
+    "2": "04 Jun 2026",
+    "3": "INV-000001",
+    "4": "AED 2,305.80",
+    "5": "100123456700003",
+    "6": "https://staging.ductly.ae/sample-invoice.pdf"
+  },
+  "types": {
+    "twilio/media": {
+      "body": "Hi {{1}}, thank you for choosing Ductly! Your tax invoice for the duct cleaning on {{2}} is attached.\n\nInvoice: {{3}}\nTotal: {{4}}\nTRN: {{5}}\n\nReply here if you have any questions — we're happy to help.",
+      "media": ["{{6}}"]
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "friendly_name": "ductly_job_status",
+  "language": "en",
+  "variables": {
+    "1": "Ahmed",
+    "2": "Tue 21 Apr, 10:00 AM",
+    "3": "Dubai Marina, Tower 5"
+  },
+  "types": {
+    "twilio/quick-reply": {
+      "body": "Job update needed for Ductly.\n\nCustomer: {{1}}\nWhen: {{2}}\nWhere: {{3}}\n\nTap to confirm the status of this job:",
+      "actions": [
+        { "id": "job_completed", "title": "Completed" },
+        { "id": "job_not_completed", "title": "Not completed" }
+      ]
+    }
+  }
+}
