@@ -42,7 +42,7 @@ export default function TermsOfServicePage() {
             <h2 className="text-[20px] font-medium mb-3" style={{ fontFamily: "var(--font-heading)", color: "rgb(61,61,61)" }}>2. Booking and Payment</h2>
             <ul className="list-disc pl-6 space-y-2">
               <li>All bookings require full payment at the time of scheduling.</li>
-              <li>Prices are displayed in UAE Dirhams (AED) and include VAT where applicable.</li>
+              <li>Prices are displayed in UAE Dirhams (AED) and are exclusive of VAT. 5% VAT is added at checkout and itemised on your tax invoice.</li>
               <li>Payment is processed securely by Stripe. We do not store credit card information.</li>
               <li>A booking confirmation will be sent to your registered email address.</li>
               <li>Time slots are reserved for 10 minutes during the booking process. Unpaid reservations are automatically released.</li>

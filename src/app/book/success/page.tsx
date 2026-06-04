@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { filsToAedString, VAT_RATE_PERCENT } from "@/lib/vat";
 
 interface BookingDetails {
   plan: string;
@@ -12,6 +13,9 @@ interface BookingDetails {
   bedrooms: string;
   thermostats: string;
   price_aed: string;
+  price_net_fils: number;
+  price_vat_fils: number;
+  price_total_fils: number;
 }
 
 function SuccessContent() {
@@ -110,7 +114,9 @@ function SuccessContent() {
                 }`,
               },
               { label: "Thermostats", value: details.thermostats },
-              { label: "Total", value: `AED ${Number(details.price_aed).toLocaleString()}`, highlight: true },
+              { label: "Subtotal", value: `AED ${filsToAedString(details.price_net_fils)}` },
+              { label: `VAT (${VAT_RATE_PERCENT}%)`, value: `AED ${filsToAedString(details.price_vat_fils)}` },
+              { label: "Total", value: `AED ${filsToAedString(details.price_total_fils)}`, highlight: true },
             ].map((row) => (
               <div
                 key={row.label}

@@ -40,6 +40,14 @@ export async function GET(request: NextRequest) {
 
     const meta = session.metadata || {};
 
+    // Prefer the authoritative amount actually charged; fall back to the
+    // metadata fils breakdown, then to the legacy net-only field.
+    const netFils = Number(meta.price_net_fils) || 0;
+    const vatFils = Number(meta.price_vat_fils) || 0;
+    const totalFils =
+      Number(meta.price_total_fils) ||
+      (typeof session.amount_total === "number" ? session.amount_total : 0);
+
     return NextResponse.json({
       plan: meta.plan || "signature",
       address: meta.address || "",
@@ -47,7 +55,10 @@ export async function GET(request: NextRequest) {
       property_type: meta.property_type || "",
       bedrooms: meta.bedrooms || "0",
       thermostats: meta.thermostats || "1",
-      price_aed: meta.price_aed || "0",
+      price_aed: meta.price_aed || "0", // net, whole AED (legacy)
+      price_net_fils: netFils,
+      price_vat_fils: vatFils,
+      price_total_fils: totalFils,
     });
   } catch (err) {
     console.error("Failed to retrieve checkout session:", err);

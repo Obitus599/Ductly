@@ -3,6 +3,7 @@ import { stripe, isStripeTestMode } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
+import { vatFromNet, VAT_RATE_PERCENT } from "@/lib/vat";
 
 /**
  * Pricing: plan tier rate × number of thermostats.
@@ -143,10 +144,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calculate price: tier rate × thermostats
+    // Calculate price: tier rate × thermostats. Displayed prices are
+    // NET (VAT-exclusive); 5% VAT is added on top at checkout.
     const rate = planCfg.rate;
     const priceAED = rate * thermostatCount;
     const priceInFils = priceAED * 100;
+    const vat = vatFromNet(priceInFils);
 
     // 1. Verify the booking lock is still active
     const { data: lock } = await supabaseAdmin
@@ -204,6 +207,15 @@ export async function POST(request: NextRequest) {
         address_details: address_details || null,
         status: "pending",
         is_test_data: testMode,
+        // Financial snapshot for the FTA tax invoice — persisted here so
+        // the invoice never has to recompute or read back from Stripe.
+        plan: planKey,
+        thermostats: thermostatCount,
+        price_net_fils: vat.netFils,
+        price_vat_fils: vat.vatFils,
+        price_total_fils: vat.totalFils,
+        vat_rate: vat.vatRatePercent,
+        currency: "aed",
       } as never)
       .select("id")
       .returns<{ id: string }[]>()
@@ -249,6 +261,9 @@ export async function POST(request: NextRequest) {
           ducts: String(ductCount),
           plan: planKey,
           price_aed: String(priceAED),
+          price_net_fils: String(vat.netFils),
+          price_vat_fils: String(vat.vatFils),
+          price_total_fils: String(vat.totalFils),
         },
         payment_intent_data: {
           metadata: {
@@ -263,10 +278,22 @@ export async function POST(request: NextRequest) {
           {
             price_data: {
               currency: "aed",
-              unit_amount: priceInFils,
+              unit_amount: vat.netFils,
               product_data: {
                 name: `Duct Cleaning — ${planName} Plan`,
                 description: `${propertyLabel} — ${bedroomLabel} · ${thermostatCount} thermostat${thermostatCount > 1 ? "s" : ""} · ${ductCount} duct${ductCount > 1 ? "s" : ""}`,
+              },
+            },
+            quantity: 1,
+          },
+          {
+            // VAT charged as its own line so the customer sees it broken
+            // out at checkout — total = net + VAT.
+            price_data: {
+              currency: "aed",
+              unit_amount: vat.vatFils,
+              product_data: {
+                name: `VAT (${VAT_RATE_PERCENT}%)`,
               },
             },
             quantity: 1,
@@ -293,7 +320,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       checkout_url: checkoutSession.url,
       booking_id: booking.id,
-      price_aed: priceAED,
+      price_aed: priceAED, // net (VAT-exclusive), whole AED
+      price_net_fils: vat.netFils,
+      price_vat_fils: vat.vatFils,
+      price_total_fils: vat.totalFils,
     });
   } catch (error) {
     console.error("Checkout error:", error);

@@ -1,6 +1,7 @@
 "use client";
 
 import { CARD, CTA, Row, formatSlot, formatDate } from "./shared";
+import { vatFromNet, filsToAedString, VAT_RATE_PERCENT } from "@/lib/vat";
 
 interface CheckoutStepProps {
   plan: { name: string; rate: number };
@@ -66,27 +67,35 @@ export default function CheckoutStep({
           <Row label="Date" value={formatDate(selectedDate)} />
           <Row label="Time" value={formatSlot(selectedSlot)} />
         </div>
-        <div className="border-t-2 border-[rgb(230,230,230)] mt-3 pt-3">
-          <div className="flex justify-between items-center">
-            <span
-              className="text-[16px] font-medium text-[rgb(61,61,61)]"
-              style={{ fontFamily: "var(--font-body)" }}
-            >
-              Total
-            </span>
-            <span
-              className="text-[22px] font-medium tracking-[-0.02em]"
-              style={{
-                fontFamily: "var(--font-heading)",
-                background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              AED {(plan.rate * thermostats).toLocaleString()}
-            </span>
-          </div>
-        </div>
+        {(() => {
+          // Prices are quoted NET; 5% VAT is added on top at payment.
+          const vat = vatFromNet(plan.rate * thermostats * 100);
+          return (
+            <div className="border-t-2 border-[rgb(230,230,230)] mt-3 pt-3 space-y-1.5">
+              <Row label="Subtotal" value={`AED ${filsToAedString(vat.netFils)}`} />
+              <Row label={`VAT (${VAT_RATE_PERCENT}%)`} value={`AED ${filsToAedString(vat.vatFils)}`} />
+              <div className="flex justify-between items-center pt-1">
+                <span
+                  className="text-[16px] font-medium text-[rgb(61,61,61)]"
+                  style={{ fontFamily: "var(--font-body)" }}
+                >
+                  Total
+                </span>
+                <span
+                  className="text-[22px] font-medium tracking-[-0.02em]"
+                  style={{
+                    fontFamily: "var(--font-heading)",
+                    background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                  }}
+                >
+                  AED {filsToAedString(vat.totalFils)}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* PDPL consent (UAE Federal Decree-Law 45/2021) */}

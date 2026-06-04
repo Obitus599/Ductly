@@ -6,6 +6,7 @@ import { assignTeamToBooking } from "@/lib/scheduling-agent";
 import { fireN8nWebhook } from "@/lib/n8n";
 import { fireOpsAlert } from "@/lib/ops-alert";
 import { buildMapsLink, formatSlotForDispatch, addressQuality } from "@/lib/dispatch-format";
+import { vatFromNet } from "@/lib/vat";
 import { UAE_TZ_SUFFIX } from "@/lib/slot-helpers";
 import { ADMIN_RECORDED_CONSENT_VERSION } from "@/lib/consent";
 
@@ -215,6 +216,9 @@ export async function POST(request: NextRequest) {
   // 2. Create booking as confirmed (no payment for manual bookings)
   const manageToken = `bk_${crypto.randomBytes(24).toString("hex")}`;
 
+  // Financial snapshot — net price × thermostats, 5% VAT on top.
+  const manualVat = vatFromNet(planCfg.rate * thermostatCount * 100);
+
   const bookingPayload: Record<string, unknown> = {
     customer_id: customerId,
     slot_start,
@@ -224,6 +228,11 @@ export async function POST(request: NextRequest) {
     thermostats: thermostatCount,
     status: "confirmed",
     manage_token: manageToken,
+    price_net_fils: manualVat.netFils,
+    price_vat_fils: manualVat.vatFils,
+    price_total_fils: manualVat.totalFils,
+    vat_rate: manualVat.vatRatePercent,
+    currency: "aed",
   };
   if (address_details) bookingPayload.address_details = address_details;
   if (notes) bookingPayload.notes = notes;

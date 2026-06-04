@@ -422,10 +422,11 @@ function PricingCardContent({ plan }: { plan: typeof plans[0] }) {
       <h3 className="text-[36px] md:text-[48px] font-normal tracking-[-0.05em] text-[rgb(61,61,61)] mb-1 leading-[1.2]" style={{ fontFamily: "var(--font-heading)" }}>
         {plan.name}
       </h3>
-      <div className="flex items-baseline gap-2 mb-3">
+      <div className="flex items-baseline gap-2 mb-1">
         <span className="text-[36px] md:text-[44px] font-medium text-[rgb(61,61,61)] leading-none" style={{ fontFamily: "var(--font-stat)" }}>{plan.price}</span>
         <span className="text-[14px] text-[rgb(153,153,153)]" style={{ fontFamily: "var(--font-body)" }}>AED / per thermostat</span>
       </div>
+      <p className="text-[12px] text-[rgb(170,170,170)] mb-3" style={{ fontFamily: "var(--font-body)" }}>+ 5% VAT</p>
       <p className="text-[16px] text-[rgb(109,109,109)] mb-6 leading-[1.4]" style={{ fontFamily: "var(--font-body)" }}>{plan.tagline}</p>
       <Link href={`/book?plan=${plan.name.toLowerCase()}`} className="w-full flex items-center justify-center px-6 py-3.5 text-[16px] text-white leading-[150%] hover:brightness-110 transition-all duration-200 mb-7" style={PRICING_BTN_STYLE}>
         {plan.cta}

@@ -168,21 +168,35 @@ describe("POST /api/checkout", () => {
     expect(data.price_aed).toBe(2196); // 4 thermostats × 549 AED
   });
 
-  it("passes correct args to Stripe (price, metadata, idempotency)", async () => {
+  it("passes correct args to Stripe (price, VAT line, metadata, idempotency)", async () => {
     await POST(makeRequest(VALID_BODY));
 
     expect(mockStripeCreate).toHaveBeenCalledTimes(1);
     const [createArgs, createOpts] = mockStripeCreate.mock.calls[0];
 
-    // Price: signature plan (549) × 4 thermostats = 2196 AED = 219600 fils
+    // Line 0: net service — signature (549) × 4 = 2196 AED = 219600 fils
     expect(createArgs.line_items[0].price_data.unit_amount).toBe(219600);
     expect(createArgs.line_items[0].price_data.currency).toBe("aed");
 
-    // Metadata
+    // Line 1: VAT (5%) charged on top — 219600 × 5% = 10980 fils
+    expect(createArgs.line_items[1].price_data.unit_amount).toBe(10980);
+    expect(createArgs.line_items[1].price_data.product_data.name).toMatch(/VAT/);
+    // Customer is charged net + VAT = 230580 fils (AED 2305.80)
+    const charged = createArgs.line_items.reduce(
+      (sum: number, li: { price_data: { unit_amount: number }; quantity: number }) =>
+        sum + li.price_data.unit_amount * li.quantity,
+      0
+    );
+    expect(charged).toBe(230580);
+
+    // Metadata: price_aed stays NET; fils breakdown carries net/VAT/total
     expect(createArgs.metadata.booking_id).toBe("book-1");
     expect(createArgs.metadata.plan).toBe("signature");
     expect(createArgs.metadata.thermostats).toBe("4");
     expect(createArgs.metadata.price_aed).toBe("2196");
+    expect(createArgs.metadata.price_net_fils).toBe("219600");
+    expect(createArgs.metadata.price_vat_fils).toBe("10980");
+    expect(createArgs.metadata.price_total_fils).toBe("230580");
     expect(createArgs.metadata.address).toBe("123 Test St, Dubai");
 
     // Idempotency key
@@ -190,6 +204,15 @@ describe("POST /api/checkout", () => {
 
     // client_reference_id
     expect(createArgs.client_reference_id).toBe("book-1");
+  });
+
+  it("returns the VAT-inclusive fils breakdown in the response", async () => {
+    const res = await POST(makeRequest(VALID_BODY));
+    const data = await res.json();
+    expect(data.price_aed).toBe(2196); // net, unchanged
+    expect(data.price_net_fils).toBe(219600);
+    expect(data.price_vat_fils).toBe(10980);
+    expect(data.price_total_fils).toBe(230580);
   });
 
   it("calculates correct price for essential plan", async () => {
