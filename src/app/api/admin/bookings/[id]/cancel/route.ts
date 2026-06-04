@@ -55,7 +55,30 @@ export async function POST(
     );
   }
 
-  // 2. Issue refund if requested and payment exists
+  // 2. CLAIM the cancellation atomically (optimistic concurrency on the
+  //    status we just read) BEFORE issuing any refund — so a concurrent
+  //    confirm/complete or duplicate request can't cause a double refund.
+  const { data: claimed } = await supabase
+    .from("bookings")
+    .update({
+      status: "cancelled",
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: "admin",
+      cancellation_reason: reason || null,
+    } as never)
+    .eq("id", id)
+    .eq("status", booking.status)
+    .select("id")
+    .returns<{ id: string }[]>();
+
+  if (!claimed || claimed.length === 0) {
+    return NextResponse.json(
+      { error: "Booking status changed concurrently; cancellation aborted." },
+      { status: 409 }
+    );
+  }
+
+  // 3. Now that we own the cancellation, issue the refund if requested.
   let refundId: string | null = null;
   let refundStatus = "pending";
 
@@ -72,14 +95,10 @@ export async function POST(
     }
   }
 
-  // 3. Update booking
+  // 3b. Record the refund outcome on the (already-cancelled) booking.
   await supabase
     .from("bookings")
     .update({
-      status: "cancelled",
-      cancelled_at: new Date().toISOString(),
-      cancelled_by: "admin",
-      cancellation_reason: reason || null,
       refund_id: refundId,
       refund_status: issueRefund ? refundStatus : null,
     } as never)

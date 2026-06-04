@@ -82,6 +82,8 @@ describe("fireOpsAlert", () => {
       blackout: "Calendar Blocked",
       blackout_removed: "Block Removed",
       job_not_completed: "Job NOT Completed",
+      payment_orphan: "PAID but NOT booked",
+      invoice_failed: "Invoice FAILED",
     };
 
     for (const [event, label] of Object.entries(expected)) {

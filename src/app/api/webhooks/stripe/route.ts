@@ -65,7 +65,26 @@ export async function POST(request: NextRequest) {
       const address = metadata.address;
 
       if (!bookingId || !slotStart) {
+        // Stripe treats our 200 as success and won't retry — so a
+        // payment with broken metadata would silently never dispatch.
+        // Persist it for manual triage instead of only console.error.
         console.error("Missing booking metadata in checkout session");
+        await supabase.from("error_log").insert({
+          flow_name: "stripe_webhook_missing_metadata",
+          error_message:
+            "checkout.session.completed missing booking_id/slot_start — payment taken, booking NOT dispatched",
+          payload: {
+            session_id: session.id,
+            payment_intent: session.payment_intent,
+            customer_email: session.customer_email,
+            metadata,
+          },
+        } as never);
+        fireOpsAlert("payment_orphan", {
+          customerName: session.customer_email || "",
+          extra: `Stripe session ${session.id} was paid but had no booking_id/slot_start — refund/re-book needed.`,
+          source: "stripe_webhook",
+        });
         break;
       }
 
@@ -90,9 +109,14 @@ export async function POST(request: NextRequest) {
         `Payment confirmed for booking ${bookingId} (test_data=${isTestData})`
       );
 
-      // 1. Update booking status to confirmed + store payment ID + generate manage token
+      // 1. Update booking status to confirmed + store payment ID + generate manage token.
+      //    Compare-and-swap: only confirm from a PRE-confirmation state. This
+      //    prevents a late/duplicate/out-of-order webhook from resurrecting a
+      //    booking the customer already cancelled (and was refunded for), or
+      //    re-confirming an expired one. If 0 rows match, the booking is no
+      //    longer confirmable — skip team assignment + dispatch entirely.
       const manageToken = `bk_${crypto.randomBytes(24).toString("hex")}`;
-      await supabase
+      const { data: confirmedRows } = await supabase
         .from("bookings")
         .update({
           status: "confirmed",
@@ -100,7 +124,17 @@ export async function POST(request: NextRequest) {
           manage_token: manageToken,
           is_test_data: isTestData,
         } as never)
-        .eq("id", bookingId);
+        .eq("id", bookingId)
+        .in("status", ["pending", "payment_failed"])
+        .select("id")
+        .returns<{ id: string }[]>();
+
+      if (!confirmedRows || confirmedRows.length === 0) {
+        console.warn(
+          `Booking ${bookingId} not in a confirmable state (already finalized/cancelled); skipping assignment + dispatch`
+        );
+        break;
+      }
 
       // 2. Delete the temporary booking lock
       if (sessionId) {

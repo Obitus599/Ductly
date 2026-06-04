@@ -75,6 +75,17 @@ export async function GET(request: NextRequest) {
       .maybeSingle(),
   ]);
 
+  // Invoices reference the customer's bookings — include them for a
+  // complete access response (Art. 17).
+  const bookingIds = (bookingsRes.data ?? []).map((b) => b.id as string);
+  const invoicesRes = bookingIds.length
+    ? await supabaseAdmin
+        .from("invoices")
+        .select("*")
+        .in("booking_id", bookingIds)
+        .returns<Record<string, unknown>[]>()
+    : { data: [] as Record<string, unknown>[] };
+
   const payload = {
     exported_at: new Date().toISOString(),
     notice:
@@ -82,6 +93,7 @@ export async function GET(request: NextRequest) {
       "Payment records may be retained for 5 years under UAE commercial law even after a deletion request.",
     customer,
     bookings: bookingsRes.data ?? [],
+    invoices: invoicesRes.data ?? [],
     feedback: feedbackRes.data ?? [],
     contact_submissions: contactsRes.data ?? [],
     newsletter_subscription: newsletterRes.data ?? null,

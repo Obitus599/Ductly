@@ -55,6 +55,16 @@ function makeEvent(type: string, data: Record<string, unknown>): Stripe.Event {
 function setupSupabaseMock(bookingStatus = "pending") {
   mockSupabase.from.mockImplementation((table: string) => {
     if (table === "bookings") {
+      // .update().eq() is awaited directly (payment_failed/expired), and
+      // the confirm path chains .eq().in().select().returns() (CAS guard).
+      const eqResult: Record<string, unknown> = {
+        in: () => ({
+          select: () => ({
+            returns: vi.fn().mockResolvedValue({ data: [{ id: "book-1" }], error: null }),
+          }),
+        }),
+        then: (resolve: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(resolve),
+      };
       return {
         select: () => ({
           eq: () => ({
@@ -67,7 +77,7 @@ function setupSupabaseMock(bookingStatus = "pending") {
           }),
         }),
         update: () => ({
-          eq: vi.fn().mockResolvedValue({ error: null }),
+          eq: () => eqResult,
         }),
       };
     }

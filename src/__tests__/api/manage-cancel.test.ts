@@ -49,8 +49,18 @@ function setupMock(status = "confirmed", slotStart = futureSlot) {
             }),
           }),
         }),
+        // Claim chains .eq().eq().select().returns() (1 row = claimed);
+        // the refund-outcome update is .eq() awaited.
         update: () => ({
-          eq: vi.fn().mockResolvedValue({ error: null }),
+          eq: () => ({
+            eq: () => ({
+              select: () => ({
+                returns: vi.fn().mockResolvedValue({ data: [{ id: "book-1" }], error: null }),
+              }),
+            }),
+            then: (resolve: (v: unknown) => unknown) =>
+              Promise.resolve({ error: null }).then(resolve),
+          }),
         }),
       };
     }

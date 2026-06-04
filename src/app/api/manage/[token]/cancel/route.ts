@@ -73,7 +73,32 @@ export async function POST(
     );
   }
 
-  // 4. Issue Stripe refund
+  // 4. CLAIM the cancellation atomically BEFORE refunding. The
+  //    conditional update (status='confirmed' → 'cancelled') ensures only
+  //    one actor performs the cancel: a concurrent confirm/cancel or a
+  //    duplicate request that doesn't claim a row must NOT issue a Stripe
+  //    refund. If 0 rows match, the booking is no longer confirmed.
+  const { data: claimed } = await supabase
+    .from("bookings")
+    .update({
+      status: "cancelled",
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: "customer",
+      cancellation_reason: reason || null,
+    } as never)
+    .eq("id", booking.id)
+    .eq("status", "confirmed")
+    .select("id")
+    .returns<{ id: string }[]>();
+
+  if (!claimed || claimed.length === 0) {
+    return NextResponse.json(
+      { error: "Booking is no longer active and cannot be cancelled." },
+      { status: 409 }
+    );
+  }
+
+  // 5. Now that we own the cancellation, issue the Stripe refund.
   let refundId: string | null = null;
   let refundStatus: string = "pending";
 
@@ -96,17 +121,10 @@ export async function POST(
     }
   }
 
-  // 5. Update booking status
+  // 5b. Record the refund outcome on the (already-cancelled) booking.
   await supabase
     .from("bookings")
-    .update({
-      status: "cancelled",
-      cancelled_at: new Date().toISOString(),
-      cancelled_by: "customer",
-      cancellation_reason: reason || null,
-      refund_id: refundId,
-      refund_status: refundStatus,
-    } as never)
+    .update({ refund_id: refundId, refund_status: refundStatus } as never)
     .eq("id", booking.id);
 
   // 6. Release the slot lock so the slot becomes available again

@@ -130,6 +130,15 @@ describe("GET /api/me/export", () => {
       if (table === "feedback") return listMock([{ id: "fb-1", rating: 5 }]);
       if (table === "contact_submissions") return listMock([{ id: "c-1", message: "hi" }]);
       if (table === "newsletter_subscribers") return singleMaybeMock({ id: "ns-1", active: true });
+      if (table === "invoices") {
+        return {
+          select: () => ({
+            in: () => ({
+              returns: () => Promise.resolve({ data: [{ id: "inv-1", invoice_number: "INV-000001" }] }),
+            }),
+          }),
+        };
+      }
       return {};
     });
 
@@ -141,6 +150,7 @@ describe("GET /api/me/export", () => {
     const body = JSON.parse(await res.text());
     expect(body.customer.email).toBe("alex@test.com");
     expect(body.bookings).toHaveLength(1);
+    expect(body.invoices).toHaveLength(1);
     expect(body.feedback).toHaveLength(1);
     expect(body.contact_submissions).toHaveLength(1);
     expect(body.newsletter_subscription).toEqual({ id: "ns-1", active: true });

@@ -194,15 +194,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Upsert customer (refresh consent record on every booking)
+    // 2. Upsert customer (refresh consent record on every booking).
+    //    Normalize email/phone for storage so casing/spacing variants
+    //    don't create duplicate customers (onConflict dedupes on email),
+    //    and so the stored values match the normalized identifiers used by
+    //    the verification gate and PDPL export/erasure matching.
+    const emailNorm = String(customer_email).trim().toLowerCase();
+    const phoneNorm = normalizeIdentifier("sms", customer_phone);
     const testMode = isStripeTestMode();
     const { data: customer, error: customerError } = await supabaseAdmin
       .from("customers")
       .upsert(
         {
           name: customer_name,
-          email: customer_email,
-          phone: customer_phone,
+          email: emailNorm,
+          phone: phoneNorm,
           consent_given_at: new Date().toISOString(),
           consent_version,
           deleted_at: null,
@@ -269,12 +275,12 @@ export async function POST(request: NextRequest) {
       checkoutSession = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "payment",
-        customer_email,
+        customer_email: emailNorm,
         client_reference_id: booking.id,
         metadata: {
           booking_id: booking.id,
           customer_id: customer.id,
-          customer_phone,
+          customer_phone: phoneNorm,
           customer_name,
           session_id,
           slot_start,

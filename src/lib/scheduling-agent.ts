@@ -194,6 +194,17 @@ async function assignBookingToTeam(
     );
 
   if (lockError) {
+    // Most likely a UNIQUE(team_id, slot_start) violation — another
+    // booking grabbed this exact team+slot concurrently. We already
+    // claimed team_id above; roll it back so the booking isn't left
+    // "assigned" to a double-booked team with NO slot_lock (which would
+    // otherwise stay confirmed-but-undispatched). Returning failure lets
+    // the caller fall back / surface it via error_log for reassignment.
+    await supabase
+      .from("bookings")
+      .update({ team_id: null } as never)
+      .eq("id", bookingId)
+      .eq("team_id", teamId);
     return { success: false, error: lockError.message };
   }
 
@@ -527,7 +538,20 @@ Be decisive. Pick the best team and assign immediately. Do not deliberate excess
 
       // Execute tool calls
       for (const toolCall of assistantMessage.tool_calls) {
-        const args = JSON.parse(toolCall.function.arguments);
+        // Guard the parse: malformed tool-call JSON should let the model
+        // self-correct on the next turn, not abort the whole conversation
+        // (and drop to the deterministic fallback) for one bad call.
+        let args;
+        try {
+          args = JSON.parse(toolCall.function.arguments);
+        } catch {
+          messages.push({
+            role: "tool",
+            content: JSON.stringify({ error: "Invalid JSON arguments — resend valid JSON." }),
+            tool_call_id: toolCall.id,
+          });
+          continue;
+        }
         const result = await executeTool(toolCall.function.name, args);
 
         messages.push({

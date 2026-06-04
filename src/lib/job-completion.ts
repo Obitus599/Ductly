@@ -68,10 +68,27 @@ async function completeJob(bookingId: string): Promise<string | undefined> {
     const invoice = await issueInvoiceForBooking(bookingId);
     return invoice.invoice_number;
   } catch (err) {
-    console.error(
-      "invoice issue on completion failed:",
-      err instanceof Error ? err.message : err
-    );
+    // Don't fail the completion, but DON'T let a missing invoice be
+    // silent either — the booking is now completed and the FTA trail
+    // needs this. Record it durably and alert the owners to re-issue
+    // via GET /api/invoices/[bookingId].
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("invoice issue on completion failed:", message);
+    await supabaseAdmin
+      .from("error_log")
+      .insert({
+        flow_name: "invoice_on_completion",
+        error_message: message,
+        payload: { booking_id: bookingId },
+      } as never)
+      .then(({ error }) => {
+        if (error) console.error("error_log insert failed:", error.message);
+      });
+    fireOpsAlert("invoice_failed", {
+      bookingId,
+      extra: `Job completed but invoice issuance FAILED (${message}). Re-issue from the admin booking page.`,
+      source: "invoice_on_completion",
+    });
     return undefined;
   }
 }

@@ -1,0 +1,12 @@
+-- ============================================================
+-- Remove anon SELECT on slot_locks (audit: RLS finding)
+--
+-- schema.sql shipped a permissive "Anyone can view slot locks" policy
+-- (USING true), which let unauthenticated clients read every team's
+-- confirmed-booking calendar via the public PostgREST surface — a
+-- competitor could infer occupancy/availability. All application
+-- readers use the service-role client (which bypasses RLS), so removing
+-- the anon policy does NOT affect the app. If anon availability is ever
+-- needed, expose a column-limited view / aggregate RPC instead.
+-- ============================================================
+DROP POLICY IF EXISTS "Anyone can view slot locks" ON slot_locks;
