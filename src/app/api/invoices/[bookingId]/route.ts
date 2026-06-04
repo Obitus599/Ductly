@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin } from "@/lib/admin-auth";
-import {
-  buildInvoiceModel,
-  getSupplierConfig,
-  type InvoiceRow,
-} from "@/lib/invoice";
+import { buildInvoiceModel } from "@/lib/invoice";
+import { issueInvoiceForBooking } from "@/lib/issue-invoice";
 import { renderInvoicePdf } from "@/lib/invoice-pdf";
 
 /**
@@ -30,23 +27,13 @@ export async function GET(
 
   const supabase = supabaseAdmin;
 
-  // Issue-or-fetch the invoice atomically. Snapshots the current TRN.
-  // The RPC isn't in the generated Database types, so cast the call
-  // (same pragma as the `as never` inserts elsewhere in the codebase).
-  const callRpc = supabase.rpc as unknown as (
-    fn: "create_invoice_for_booking",
-    args: { p_booking_id: string; p_supplier_trn: string }
-  ) => Promise<{ data: InvoiceRow | null; error: { message: string } | null }>;
-
-  const { data: invoice, error: rpcError } = await callRpc("create_invoice_for_booking", {
-    p_booking_id: bookingId,
-    p_supplier_trn: getSupplierConfig().trn,
-  });
-
-  if (rpcError || !invoice) {
-    const message = rpcError?.message ?? "Could not create invoice.";
-    // No price snapshot / booking missing → 422 so the caller knows it's
-    // not a transient error.
+  // Issue-or-fetch the invoice atomically (snapshots the current TRN).
+  let invoice;
+  try {
+    invoice = await issueInvoiceForBooking(bookingId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not create invoice.";
+    // No price snapshot / booking missing → 422 (not transient).
     const status = /no price snapshot|booking not found/i.test(message) ? 422 : 500;
     return NextResponse.json({ error: message }, { status });
   }
