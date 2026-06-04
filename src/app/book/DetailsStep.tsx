@@ -2,6 +2,7 @@
 
 import { CARD, CTA, INPUT, LABEL } from "./shared";
 import AddressPicker, { type AddressDetails } from "./AddressPicker";
+import ContactVerify from "./ContactVerify";
 
 interface DetailsStepProps {
   name: string;
@@ -20,6 +21,12 @@ interface DetailsStepProps {
   setThermostats: (v: number) => void;
   onContinue: () => void;
   valid: boolean;
+  /** #7: when true, render the email/phone OTP verification UI. */
+  verificationEnabled: boolean;
+  emailVerified: boolean;
+  setEmailVerified: (v: boolean) => void;
+  phoneVerified: boolean;
+  setPhoneVerified: (v: boolean) => void;
 }
 
 export default function DetailsStep({
@@ -27,7 +34,11 @@ export default function DetailsStep({
   addressDetails, setAddressDetails, propertyType, setPropertyType,
   bedrooms, setBedrooms, thermostats, setThermostats,
   onContinue, valid,
+  verificationEnabled, emailVerified, setEmailVerified, phoneVerified, setPhoneVerified,
 }: DetailsStepProps) {
+  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
+  const phoneDigits = phone.replace(/[^0-9]/g, "");
+  const phoneValid = phoneDigits.length >= 7 && phoneDigits.length <= 15;
   return (
     <div className="p-7 md:p-10" style={CARD}>
       <h2
@@ -63,6 +74,15 @@ export default function DetailsStep({
               placeholder="ahmed@example.com"
               className={INPUT} style={{ fontFamily: "var(--font-body)" }}
             />
+            {verificationEnabled && (
+              <ContactVerify
+                channel="email"
+                value={email.trim()}
+                valueValid={emailValid}
+                verified={emailVerified}
+                onVerifiedChange={setEmailVerified}
+              />
+            )}
           </div>
           <div>
             <label htmlFor="book-phone" className={LABEL} style={{ fontFamily: "var(--font-body)" }}>
@@ -74,6 +94,15 @@ export default function DetailsStep({
               placeholder="+971 50 123 4567"
               className={INPUT} style={{ fontFamily: "var(--font-body)" }}
             />
+            {verificationEnabled && (
+              <ContactVerify
+                channel="sms"
+                value={phone.trim()}
+                valueValid={phoneValid}
+                verified={phoneVerified}
+                onVerifiedChange={setPhoneVerified}
+              />
+            )}
           </div>
         </div>
 
