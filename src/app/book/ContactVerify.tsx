@@ -8,8 +8,9 @@ import { useState } from "react";
  * flow and reports the verified state up via onVerifiedChange.
  *
  * Rendered only when verification is enabled (the parent gates on
- * NEXT_PUBLIC_REQUIRE_CONTACT_VERIFICATION); the server enforces the
- * same gate at /api/checkout.
+ * NEXT_PUBLIC_REQUIRE_CONTACT_VERIFICATION). The server independently
+ * enforces REQUIRE_CONTACT_VERIFICATION at /api/checkout — both flags
+ * must be set together (see the checkout route note).
  */
 interface ContactVerifyProps {
   channel: "email" | "sms";

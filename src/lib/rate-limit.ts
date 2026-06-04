@@ -4,14 +4,17 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
  * Persistent rate limiter backed by Supabase.
  *
  * Uses an atomic PostgreSQL function (check_rate_limit) that increments
- * a counter in a fixed-window table. Works correctly on Vercel serverless
- * where in-memory state is lost between invocations.
+ * a counter in a fixed-window table.
  *
- * Falls back to a permissive pass-through if the DB function hasn't been
- * created yet (logs a warning on first failure, then suppresses).
+ * On a backend error it fails OPEN (allows the request) but only opens a
+ * short circuit-breaker window before re-probing — so a transient DB blip
+ * can't PERMANENTLY disable every throttle until a process restart (the
+ * old behaviour latched off forever). A healthy response closes the
+ * breaker again.
  */
 
-let dbAvailable = true;
+const CIRCUIT_OPEN_MS = 60_000;
+let circuitOpenUntil = 0;
 
 /**
  * Check if a request should be rate-limited.
@@ -26,7 +29,8 @@ export async function checkRateLimit(
   limit: number,
   windowMs: number
 ): Promise<{ allowed: boolean }> {
-  if (!dbAvailable) {
+  // Circuit open after a recent failure — skip the DB until it cools down.
+  if (circuitOpenUntil && Date.now() < circuitOpenUntil) {
     return { allowed: true };
   }
 
@@ -40,16 +44,18 @@ export async function checkRateLimit(
     });
 
     if (error) {
-      // If the function doesn't exist yet, disable DB rate limiting
-      // and allow all requests rather than blocking everyone.
+      // Allow rather than block everyone, but only suppress the DB for a
+      // short window so we re-probe instead of latching off forever.
       console.warn("Rate limit DB unavailable, allowing request:", error.message);
-      dbAvailable = false;
+      circuitOpenUntil = Date.now() + CIRCUIT_OPEN_MS;
       return { allowed: true };
     }
 
+    circuitOpenUntil = 0; // healthy — close the breaker
     return { allowed: data as boolean };
   } catch (err) {
     console.warn("Rate limit check failed:", err);
+    circuitOpenUntil = Date.now() + CIRCUIT_OPEN_MS;
     return { allowed: true };
   }
 }

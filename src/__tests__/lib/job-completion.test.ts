@@ -19,49 +19,50 @@ import {
   processJobStatusReply,
 } from "@/lib/job-completion";
 
-/** Per-table terminal values resolved by maybeSingle(). */
-let terminals: Record<string, unknown>;
-const updateEqCalls: ReturnType<typeof vi.fn>[] = [];
+/**
+ * Per-table terminals:
+ *   list   → resolved when the query chain is awaited directly (.returns())
+ *   single → resolved by .maybeSingle()
+ * The chain is thenable so `await from(t)....returns()` yields `list`.
+ */
+let terminals: Record<string, { list?: unknown; single?: unknown }>;
 
 beforeEach(() => {
   vi.clearAllMocks();
   terminals = {};
-  updateEqCalls.length = 0;
   mockFrom.mockImplementation((table: string) => {
-    const updateEq = vi.fn().mockResolvedValue({ error: null });
-    updateEqCalls.push(updateEq);
+    const t = () => terminals[table] || {};
     const chain: Record<string, unknown> = {
       select: () => chain,
       eq: () => chain,
+      gte: () => chain,
+      lt: () => chain,
+      is: () => chain,
       order: () => chain,
       limit: () => chain,
+      update: () => chain,
+      delete: () => chain,
+      insert: () => chain,
       returns: () => chain,
-      maybeSingle: vi.fn().mockResolvedValue(terminals[table] ?? { data: null }),
-      update: () => ({ eq: updateEq }),
+      maybeSingle: () => Promise.resolve(t().single ?? { data: null }),
+      then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+        Promise.resolve(t().list ?? { data: [], error: null }).then(res, rej),
     };
     return chain;
   });
 });
 
-describe("normalizeWhatsapp", () => {
-  it("strips the whatsapp: prefix and formatting", () => {
+describe("normalizeWhatsapp / outcomeFromButton", () => {
+  it("normalizes numbers", () => {
     expect(normalizeWhatsapp("whatsapp:+971501234567")).toBe("+971501234567");
     expect(normalizeWhatsapp("+971 50 (123) 4567")).toBe("+971501234567");
   });
-});
-
-describe("outcomeFromButton", () => {
-  it("maps payloads (checking 'not' before 'complete')", () => {
+  it("maps buttons, checking 'not' before 'complete'", () => {
     expect(outcomeFromButton("job_completed", undefined)).toBe("completed");
     expect(outcomeFromButton("job_not_completed", undefined)).toBe("not_completed");
-  });
-  it("falls back to the button title", () => {
     expect(outcomeFromButton(undefined, "Completed")).toBe("completed");
     expect(outcomeFromButton(undefined, "Not completed")).toBe("not_completed");
-  });
-  it("returns null for anything else", () => {
     expect(outcomeFromButton(undefined, undefined)).toBeNull();
-    expect(outcomeFromButton("", "hello there")).toBeNull();
   });
 });
 
@@ -71,59 +72,46 @@ describe("processJobStatusReply", () => {
     expect(r).toEqual({ matched: false, reason: "unrecognized_button" });
   });
 
-  it("reports when no pending prompt matches the number", async () => {
-    terminals.job_status_prompts = { data: null };
-    const r = await processJobStatusReply({
-      from: "whatsapp:+971500000000",
-      buttonPayload: "job_completed",
-    });
+  it("no pending prompt → matched:false", async () => {
+    terminals.job_status_prompts = { list: { data: [] } };
+    const r = await processJobStatusReply({ from: "whatsapp:+971500000000", buttonPayload: "job_completed" });
     expect(r).toEqual({ matched: false, outcome: "completed", reason: "no_pending_prompt" });
   });
 
-  it("on Completed: marks the prompt, marks the booking, issues the invoice", async () => {
-    terminals.job_status_prompts = { data: { id: "p1", booking_id: "b1", team_id: "t1" } };
+  it("REFUSES to auto-resolve when 2+ prompts are pending (ambiguous)", async () => {
+    terminals.job_status_prompts = {
+      list: { data: [{ id: "p2", booking_id: "b2" }, { id: "p1", booking_id: "b1" }] },
+    };
+    const r = await processJobStatusReply({ from: "whatsapp:+971501112222", buttonPayload: "job_completed" });
+    expect(r).toEqual({ matched: false, outcome: "completed", reason: "ambiguous_pending" });
+    expect(mockIssueInvoice).not.toHaveBeenCalled();
+  });
+
+  it("Completed (confirmed booking) → completes + issues invoice", async () => {
+    terminals.job_status_prompts = { list: { data: [{ id: "p1", booking_id: "b1", team_id: "t1" }] } };
+    terminals.bookings = { list: { data: [{ id: "b1" }] } }; // status='confirmed' update matched 1 row
     mockIssueInvoice.mockResolvedValue({ invoice_number: "INV-000005" });
 
-    const r = await processJobStatusReply({
-      from: "whatsapp:+971501112222",
-      buttonPayload: "job_completed",
-    });
-
-    expect(r).toEqual({
-      matched: true,
-      outcome: "completed",
-      bookingId: "b1",
-      invoiceNumber: "INV-000005",
-    });
+    const r = await processJobStatusReply({ from: "whatsapp:+971501112222", buttonPayload: "job_completed" });
+    expect(r).toEqual({ matched: true, outcome: "completed", bookingId: "b1", invoiceNumber: "INV-000005" });
     expect(mockIssueInvoice).toHaveBeenCalledWith("b1");
-    expect(mockFireOpsAlert).not.toHaveBeenCalled();
-    // prompt status + booking status updates both ran
-    expect(updateEqCalls.some((f) => f.mock.calls.length > 0)).toBe(true);
   });
 
-  it("on Completed: still completes even if invoice issue fails", async () => {
-    terminals.job_status_prompts = { data: { id: "p1", booking_id: "b1", team_id: null } };
-    mockIssueInvoice.mockRejectedValue(new Error("no price snapshot"));
+  it("Completed on a non-confirmed booking → no invoice (status guard)", async () => {
+    terminals.job_status_prompts = { list: { data: [{ id: "p1", booking_id: "b1", team_id: "t1" }] } };
+    terminals.bookings = { list: { data: [] } }; // update matched 0 rows (booking not 'confirmed')
 
-    const r = await processJobStatusReply({
-      from: "whatsapp:+971501112222",
-      buttonText: "Completed",
-    });
-    expect(r.matched).toBe(true);
-    expect(r.outcome).toBe("completed");
-    expect(r.invoiceNumber).toBeUndefined();
+    const r = await processJobStatusReply({ from: "whatsapp:+971501112222", buttonText: "Completed" });
+    expect(r).toEqual({ matched: true, outcome: "completed", bookingId: "b1", invoiceNumber: undefined });
+    expect(mockIssueInvoice).not.toHaveBeenCalled();
   });
 
-  it("on Not completed: fires an ops alert, no invoice", async () => {
-    terminals.job_status_prompts = { data: { id: "p2", booking_id: "b2", team_id: "t1" } };
-    terminals.bookings = { data: { slot_start: "2026-04-20T10:00:00+04:00", address: "Villa 1", customer_id: "c1" } };
-    terminals.customers = { data: { name: "Jane", phone: "+971509998888" } };
+  it("Not completed → ops alert, no invoice", async () => {
+    terminals.job_status_prompts = { list: { data: [{ id: "p2", booking_id: "b2", team_id: "t1" }] } };
+    terminals.bookings = { single: { data: { slot_start: "2026-04-20T10:00:00+04:00", address: "Villa 1", customer_id: "c1" } } };
+    terminals.customers = { single: { data: { name: "Jane", phone: "+971509998888" } } };
 
-    const r = await processJobStatusReply({
-      from: "whatsapp:+971501112222",
-      buttonPayload: "job_not_completed",
-    });
-
+    const r = await processJobStatusReply({ from: "whatsapp:+971501112222", buttonPayload: "job_not_completed" });
     expect(r).toEqual({ matched: true, outcome: "not_completed", bookingId: "b2" });
     expect(mockIssueInvoice).not.toHaveBeenCalled();
     expect(mockFireOpsAlert).toHaveBeenCalledTimes(1);

@@ -17,8 +17,12 @@ import {
   MAX_ATTEMPTS,
 } from "@/lib/verification";
 
-/** A chainable Supabase query stub whose maybeSingle resolves `terminal`. */
-function chain(terminal: unknown) {
+/**
+ * A chainable Supabase query stub. `.maybeSingle()` resolves `single`;
+ * awaiting the chain directly (e.g. the cumulative-attempts `.returns()`
+ * query) resolves `list` (default: no rows → sum 0 → no lockout).
+ */
+function chain(single: unknown, list: unknown = { data: [], error: null }) {
   const updateEq = vi.fn().mockResolvedValue({ error: null });
   const insert = vi.fn().mockResolvedValue({ error: null });
   const c: Record<string, unknown> = {
@@ -26,13 +30,16 @@ function chain(terminal: unknown) {
     eq: () => c,
     is: () => c,
     gte: () => c,
+    lt: () => c,
     order: () => c,
     limit: () => c,
     returns: () => c,
     delete: () => c,
-    maybeSingle: vi.fn().mockResolvedValue(terminal),
+    maybeSingle: vi.fn().mockResolvedValue(single),
     update: () => ({ eq: updateEq }),
     insert,
+    then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+      Promise.resolve(list).then(res, rej),
     _updateEq: updateEq,
     _insert: insert,
   };
@@ -112,6 +119,15 @@ describe("verifyCode", () => {
         },
       })
     );
+    expect(await verifyCode("sms", "+971500000000", "123456")).toEqual({
+      ok: false,
+      reason: "too_many_attempts",
+    });
+  });
+
+  it("locks out per-identifier once cumulative failures hit the cap (survives re-issue)", async () => {
+    // Sum of attempts across recent codes (6 + 5 = 11) >= MAX_IDENTIFIER_ATTEMPTS (10).
+    mockFrom.mockReturnValue(chain({ data: null }, { data: [{ attempts: 6 }, { attempts: 5 }] }));
     expect(await verifyCode("sms", "+971500000000", "123456")).toEqual({
       ok: false,
       reason: "too_many_attempts",

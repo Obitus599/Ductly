@@ -128,9 +128,13 @@ export async function POST(request: NextRequest) {
     }
 
     // #7 customer verification gate. Off by default so the flow is
-    // unchanged until the booking-page OTP UI ships; flip
-    // REQUIRE_CONTACT_VERIFICATION=true to enforce. Both the email and
-    // phone must have been verified within the validity window.
+    // unchanged until the booking-page OTP UI ships.
+    // IMPORTANT: enable BOTH flags together —
+    //   REQUIRE_CONTACT_VERIFICATION=true            (this server gate)
+    //   NEXT_PUBLIC_REQUIRE_CONTACT_VERIFICATION=true (renders the OTP UI)
+    // Setting only this server flag renders no OTP UI, so customers can
+    // never verify and every checkout 403s — a full booking outage.
+    // Both the email and phone must be verified within the validity window.
     if (process.env.REQUIRE_CONTACT_VERIFICATION === "true") {
       const [emailVerified, phoneVerified] = await Promise.all([
         isContactVerified("email", normalizeIdentifier("email", customer_email)),

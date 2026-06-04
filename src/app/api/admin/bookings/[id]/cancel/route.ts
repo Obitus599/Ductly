@@ -45,8 +45,14 @@ export async function POST(
     return NextResponse.json({ error: "Booking not found." }, { status: 404 });
   }
 
-  if (booking.status === "cancelled") {
-    return NextResponse.json({ error: "Booking is already cancelled." }, { status: 409 });
+  // Refuse terminal states: cancelling a completed (and invoiced) or
+  // no-show booking would refund a fulfilled job and orphan its FTA
+  // invoice. The server is the authority here, not just the admin UI.
+  if (["cancelled", "completed", "no_show"].includes(booking.status)) {
+    return NextResponse.json(
+      { error: `Cannot cancel a booking that is already ${booking.status}.` },
+      { status: 409 }
+    );
   }
 
   // 2. Issue refund if requested and payment exists

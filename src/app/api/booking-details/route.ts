@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { vatFromGross } from "@/lib/vat";
 
 /**
  * GET /api/booking-details?session_id=cs_xxx
@@ -40,13 +41,21 @@ export async function GET(request: NextRequest) {
 
     const meta = session.metadata || {};
 
-    // Prefer the authoritative amount actually charged; fall back to the
-    // metadata fils breakdown, then to the legacy net-only field.
-    const netFils = Number(meta.price_net_fils) || 0;
-    const vatFils = Number(meta.price_vat_fils) || 0;
+    // Prefer the metadata fils breakdown. For legacy sessions created
+    // before the VAT-exclusive split (which have amount_total but no
+    // fils breakdown), derive net/VAT from the total so the displayed
+    // Subtotal + VAT always reconciles with the Total instead of showing
+    // 0.00 / 0.00 against a non-zero total.
     const totalFils =
       Number(meta.price_total_fils) ||
       (typeof session.amount_total === "number" ? session.amount_total : 0);
+    let netFils = Number(meta.price_net_fils) || 0;
+    let vatFils = Number(meta.price_vat_fils) || 0;
+    if ((!netFils || !vatFils) && totalFils > 0) {
+      const derived = vatFromGross(totalFils);
+      netFils = derived.netFils;
+      vatFils = derived.vatFils;
+    }
 
     return NextResponse.json({
       plan: meta.plan || "signature",

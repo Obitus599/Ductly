@@ -41,10 +41,25 @@ export function outcomeFromButton(
 }
 
 async function completeJob(bookingId: string): Promise<string | undefined> {
-  await supabaseAdmin
+  // Only a still-confirmed booking can be completed. Scoping the update
+  // to status='confirmed' (and checking rows affected) prevents flipping
+  // an already-cancelled/refunded, expired, or already-completed booking
+  // back to completed — and makes concurrent replies (Twilio retries /
+  // double taps) idempotent: the second update matches 0 rows.
+  const { data: updated } = await supabaseAdmin
     .from("bookings")
     .update({ status: "completed", completed_at: new Date().toISOString() } as never)
-    .eq("id", bookingId);
+    .eq("id", bookingId)
+    .eq("status", "confirmed")
+    .select("id")
+    .returns<{ id: string }[]>();
+
+  if (!updated || updated.length === 0) {
+    console.warn(
+      `[job-completion] booking ${bookingId} was not in 'confirmed' state; skipping completion + invoice`
+    );
+    return undefined;
+  }
 
   // Issue the invoice now so it exists with its number; WhatsApp delivery
   // of the PDF is wired separately once the ductly_invoice template is
@@ -109,17 +124,30 @@ export async function processJobStatusReply(args: {
   const outcome = outcomeFromButton(args.buttonPayload, args.buttonText);
   if (!outcome) return { matched: false, reason: "unrecognized_button" };
 
-  const { data: prompt } = await supabaseAdmin
+  // The button id alone can't say WHICH booking; we correlate by the
+  // replying number's pending prompt. Fetch up to 2 so we can detect
+  // ambiguity — if a team has 2+ jobs awaiting a reply we must NOT guess
+  // (we'd invoice/complete the wrong booking). The send side must avoid
+  // leaving a team with >1 pending prompt (serialize, or embed a
+  // booking ref); until then we refuse to auto-resolve the ambiguous case.
+  const { data: pending } = await supabaseAdmin
     .from("job_status_prompts")
     .select("id, booking_id, team_id")
     .eq("team_whatsapp", number)
     .eq("status", "pending")
     .order("sent_at", { ascending: false })
-    .limit(1)
-    .returns<{ id: string; booking_id: string; team_id: string | null }[]>()
-    .maybeSingle();
+    .limit(2)
+    .returns<{ id: string; booking_id: string; team_id: string | null }[]>();
 
-  if (!prompt) return { matched: false, outcome, reason: "no_pending_prompt" };
+  const prompts = pending || [];
+  if (prompts.length === 0) return { matched: false, outcome, reason: "no_pending_prompt" };
+  if (prompts.length > 1) {
+    console.error(
+      `[job-completion] ${prompts.length}+ pending prompts for ${number}; refusing to auto-resolve (ambiguous)`
+    );
+    return { matched: false, outcome, reason: "ambiguous_pending" };
+  }
+  const prompt = prompts[0];
 
   await supabaseAdmin
     .from("job_status_prompts")

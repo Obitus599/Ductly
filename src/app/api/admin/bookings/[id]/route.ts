@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 import { fireOpsAlert } from "@/lib/ops-alert";
+import { issueInvoiceForBooking } from "@/lib/issue-invoice";
 
 /**
  * GET /api/admin/bookings/[id]
@@ -200,6 +201,20 @@ export async function PATCH(
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  // Manual completion issues the invoice too, so it matches the WhatsApp
+  // job-completion path (issue-or-fetch RPC is idempotent — never burns a
+  // number). Non-blocking: a missing price snapshot must not fail the PATCH.
+  if (updates.status === "completed" && booking.status !== "completed") {
+    try {
+      await issueInvoiceForBooking(id);
+    } catch (err) {
+      console.error(
+        "invoice issue on admin completion failed:",
+        err instanceof Error ? err.message : err
+      );
+    }
   }
 
   // Notify the owners when this PATCH cancels a booking (the dedicated

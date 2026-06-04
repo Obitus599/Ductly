@@ -13,6 +13,14 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
 export const CODE_TTL_MINUTES = 10;
 export const MAX_ATTEMPTS = 5;
 export const VERIFIED_VALID_MINUTES = 30;
+/**
+ * Per-identifier brute-force cap that survives code re-issue. The
+ * per-code MAX_ATTEMPTS alone is defeated by requesting a fresh code
+ * (which would reset the counter), so we also bound the TOTAL failed
+ * guesses across all codes for an identifier within a rolling window.
+ */
+export const MAX_IDENTIFIER_ATTEMPTS = 10;
+export const LOCKOUT_WINDOW_MINUTES = 30;
 
 export type VerifyChannel = "email" | "sms";
 
@@ -57,12 +65,17 @@ export async function createAndStoreCode(
   const codeHash = hashCode(code);
   const expiresAt = new Date(Date.now() + CODE_TTL_MINUTES * 60_000).toISOString();
 
+  // Drop only STALE codes (outside the lockout window). Recent codes are
+  // intentionally kept so their failed-attempt counts still bound
+  // re-issue — verifyCode sums them. Only the newest unconsumed code is
+  // ever matchable, so lingering old codes can't be guessed.
+  const staleCutoff = new Date(Date.now() - LOCKOUT_WINDOW_MINUTES * 60_000).toISOString();
   await supabaseAdmin
     .from("verification_codes")
     .delete()
     .eq("identifier", identifier)
     .eq("channel", channel)
-    .is("consumed_at", null);
+    .lt("created_at", staleCutoff);
 
   await supabaseAdmin.from("verification_codes").insert({
     identifier,
@@ -85,6 +98,22 @@ export async function verifyCode(
   identifier: string,
   code: string
 ): Promise<VerifyResult> {
+  // Per-identifier lockout that survives code re-issue: sum failed
+  // attempts across every code for this identifier+channel in the
+  // window. Re-sending a code no longer hands out a fresh guess budget.
+  const lockoutSince = new Date(Date.now() - LOCKOUT_WINDOW_MINUTES * 60_000).toISOString();
+  const { data: recentCodes } = await supabaseAdmin
+    .from("verification_codes")
+    .select("attempts")
+    .eq("identifier", identifier)
+    .eq("channel", channel)
+    .gte("created_at", lockoutSince)
+    .returns<{ attempts: number }[]>();
+  const totalFails = (recentCodes || []).reduce((sum, r) => sum + (r.attempts || 0), 0);
+  if (totalFails >= MAX_IDENTIFIER_ATTEMPTS) {
+    return { ok: false, reason: "too_many_attempts" };
+  }
+
   const { data: row } = await supabaseAdmin
     .from("verification_codes")
     .select("id, code_hash, expires_at, attempts, consumed_at")
