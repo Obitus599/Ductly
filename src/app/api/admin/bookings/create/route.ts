@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 import { assignTeamToBooking } from "@/lib/scheduling-agent";
 import { fireN8nWebhook } from "@/lib/n8n";
+import { fireOpsAlert } from "@/lib/ops-alert";
 import { buildMapsLink, formatSlotForDispatch, addressQuality } from "@/lib/dispatch-format";
 import { UAE_TZ_SUFFIX } from "@/lib/slot-helpers";
 import { ADMIN_RECORDED_CONSENT_VERSION } from "@/lib/consent";
@@ -306,6 +307,18 @@ export async function POST(request: NextRequest) {
       source: "manual_admin_booking",
     });
   }
+
+  // 5. Notify the owners of the new (manual) booking. Dormant until
+  //    N8N_WEBHOOK_OPS_ALERT is configured.
+  fireOpsAlert("new_booking", {
+    bookingId: booking.id,
+    customerName: customer_name,
+    customerPhone: customer_phone,
+    slotStart: slot_start,
+    address: address || "",
+    extra: `${plan} · AED ${planCfg.rate * thermostatCount} · Manual booking`,
+    source: "manual_admin_booking",
+  });
 
   return NextResponse.json({
     booking_id: booking.id,

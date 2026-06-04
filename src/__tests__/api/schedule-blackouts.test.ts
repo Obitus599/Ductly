@@ -240,7 +240,11 @@ describe("DELETE /api/admin/schedule-blackouts/[id]", () => {
   it("returns 200 on a valid uuid (idempotent)", async () => {
     mockSupabase.from.mockImplementation(() => ({
       delete: () => ({
-        eq: vi.fn().mockResolvedValue({ error: null }),
+        eq: () => ({
+          select: () => ({
+            returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+          }),
+        }),
       }),
     }));
     const validUuid = "11111111-2222-3333-4444-555555555555";

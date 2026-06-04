@@ -4,6 +4,7 @@ import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { assignTeamToBooking } from "@/lib/scheduling-agent";
 import { fireN8nWebhook } from "@/lib/n8n";
+import { fireOpsAlert } from "@/lib/ops-alert";
 import {
   buildMapsLink,
   formatSlotForDispatch,
@@ -331,6 +332,19 @@ export async function POST(request: NextRequest) {
           payment_intent_id: session.payment_intent,
         });
       }
+
+      // 5. Notify the owners (Mattia + Ashwini) of the new booking.
+      //    Independent of the customer-facing flows above — gated by its
+      //    own N8N_WEBHOOK_OPS_ALERT env var (dormant until configured).
+      fireOpsAlert("new_booking", {
+        bookingId,
+        customerName: metadata.customer_name || session.customer_email || "",
+        customerPhone: metadata.customer_phone || "",
+        slotStart,
+        address: address || "",
+        extra: `${metadata.plan || ""}${metadata.price_aed ? ` · AED ${metadata.price_aed}` : ""}`.trim(),
+        source: "online_booking",
+      });
 
       break;
     }

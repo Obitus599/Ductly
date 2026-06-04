@@ -43,7 +43,7 @@ function setupMock(status = "confirmed", slotStart = futureSlot) {
           eq: () => ({
             returns: () => ({
               single: vi.fn().mockResolvedValue({
-                data: { id: "book-1", status, slot_start: slotStart, payment_intent_id: "pi_test", team_id: "team-1" },
+                data: { id: "book-1", status, slot_start: slotStart, payment_intent_id: "pi_test", team_id: "team-1", customer_id: "cust-1" },
                 error: null,
               }),
             }),
@@ -63,6 +63,20 @@ function setupMock(status = "confirmed", slotStart = futureSlot) {
     }
     if (table === "error_log") {
       return { insert: vi.fn().mockResolvedValue({ error: null }) };
+    }
+    if (table === "customers") {
+      return {
+        select: () => ({
+          eq: () => ({
+            returns: () => ({
+              single: vi.fn().mockResolvedValue({
+                data: { name: "Jane Doe", phone: "+971501234567", email: "jane@example.com" },
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      };
     }
     return {};
   });

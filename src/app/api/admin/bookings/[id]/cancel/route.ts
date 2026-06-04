@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 import { fireN8nWebhook } from "@/lib/n8n";
+import { fireOpsAlert } from "@/lib/ops-alert";
 
 /**
  * POST /api/admin/bookings/[id]/cancel
@@ -86,16 +87,17 @@ export async function POST(
       .eq("booking_id", id);
   }
 
-  // 5. Trigger n8n cancellation notification
+  // 5. Fetch the customer once for both notifications.
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("name, phone, email")
+    .eq("id", booking.customer_id)
+    .returns<{ name: string; phone: string; email: string }[]>()
+    .single();
+
+  // 5a. Trigger n8n cancellation notification (customer-facing)
   const n8nCancelUrl = process.env.N8N_WEBHOOK_BOOKING_CANCELLED;
   if (n8nCancelUrl) {
-    const { data: customer } = await supabase
-      .from("customers")
-      .select("name, phone, email")
-      .eq("id", booking.customer_id)
-      .returns<{ name: string; phone: string; email: string }[]>()
-      .single();
-
     fireN8nWebhook("booking_cancelled_admin", n8nCancelUrl, {
       event: "booking_cancelled",
       booking_id: booking.id,
@@ -108,6 +110,17 @@ export async function POST(
       cancelled_by: "admin",
     });
   }
+
+  // 5b. Notify the owners of the cancellation. Dormant until
+  //     N8N_WEBHOOK_OPS_ALERT is configured.
+  fireOpsAlert("cancellation", {
+    bookingId: booking.id,
+    customerName: customer?.name || "",
+    customerPhone: customer?.phone || "",
+    slotStart: booking.slot_start,
+    extra: `By admin · Refund: ${issueRefund ? refundStatus : "no_refund"}${reason ? ` · ${reason}` : ""}`,
+    source: "admin_cancellation",
+  });
 
   return NextResponse.json({
     success: true,

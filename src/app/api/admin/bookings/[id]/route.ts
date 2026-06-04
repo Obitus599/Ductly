@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
+import { fireOpsAlert } from "@/lib/ops-alert";
 
 /**
  * GET /api/admin/bookings/[id]
@@ -104,9 +105,9 @@ export async function PATCH(
   // Fetch current booking
   const { data: booking, error: fetchError } = await supabase
     .from("bookings")
-    .select("id, status, team_id, slot_start")
+    .select("id, status, team_id, slot_start, customer_id")
     .eq("id", id)
-    .returns<{ id: string; status: string; team_id: string | null; slot_start: string }[]>()
+    .returns<{ id: string; status: string; team_id: string | null; slot_start: string; customer_id: string }[]>()
     .single();
 
   if (fetchError || !booking) {
@@ -199,6 +200,28 @@ export async function PATCH(
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  // Notify the owners when this PATCH cancels a booking (the dedicated
+  // cancel endpoint handles refund-bearing cancellations; this covers
+  // a status flip straight to "cancelled" from the admin detail view).
+  // Dormant until N8N_WEBHOOK_OPS_ALERT is configured.
+  if (updates.status === "cancelled" && booking.status !== "cancelled") {
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("name, phone")
+      .eq("id", booking.customer_id)
+      .returns<{ name: string; phone: string }[]>()
+      .single();
+
+    fireOpsAlert("cancellation", {
+      bookingId: booking.id,
+      customerName: customer?.name || "",
+      customerPhone: customer?.phone || "",
+      slotStart: booking.slot_start,
+      extra: "By admin · Status change",
+      source: "admin_status_patch",
+    });
   }
 
   return NextResponse.json({ success: true, updates });

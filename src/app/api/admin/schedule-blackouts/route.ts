@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
+import { fireOpsAlert } from "@/lib/ops-alert";
+import { formatSlotForDispatch } from "@/lib/dispatch-format";
 
 interface BlackoutRow {
   id: string;
@@ -147,6 +149,14 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  // Notify the owners that the calendar was blocked. Dormant until
+  // N8N_WEBHOOK_OPS_ALERT is configured.
+  fireOpsAlert("blackout", {
+    slotStart: data.starts_at,
+    extra: `${team_id ? "Team-specific" : "All teams"} · ${formatSlotForDispatch(data.starts_at)} → ${formatSlotForDispatch(data.ends_at)} · ${data.reason}`,
+    source: data.created_by || "admin",
+  });
 
   return NextResponse.json({ blackout: data });
 }

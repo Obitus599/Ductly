@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { assignTeamToBooking } from "@/lib/scheduling-agent";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { fireOpsAlert } from "@/lib/ops-alert";
+import { formatSlotForDispatch } from "@/lib/dispatch-format";
 
 const RESCHEDULE_WINDOW_HOURS = 24;
 const JOB_DURATION_MINS = 90;
@@ -60,9 +62,9 @@ export async function POST(
   // 1. Fetch the booking
   const { data: booking, error: fetchError } = await supabase
     .from("bookings")
-    .select("id, status, slot_start, slot_end, team_id, address")
+    .select("id, status, slot_start, slot_end, team_id, address, customer_id")
     .eq("manage_token", token)
-    .returns<{ id: string; status: string; slot_start: string; slot_end: string; team_id: string | null; address: string }[]>()
+    .returns<{ id: string; status: string; slot_start: string; slot_end: string; team_id: string | null; address: string; customer_id: string }[]>()
     .single();
 
   if (fetchError || !booking) {
@@ -157,6 +159,25 @@ export async function POST(
       payload: { booking_id: booking.id, new_slot_start: newSlotStart },
     } as never);
   }
+
+  // 8. Notify the owners of the reschedule. Dormant until
+  //    N8N_WEBHOOK_OPS_ALERT is configured.
+  const { data: rescheduleCustomer } = await supabase
+    .from("customers")
+    .select("name, phone")
+    .eq("id", booking.customer_id)
+    .returns<{ name: string; phone: string }[]>()
+    .single();
+
+  fireOpsAlert("reschedule", {
+    bookingId: booking.id,
+    customerName: rescheduleCustomer?.name || "",
+    customerPhone: rescheduleCustomer?.phone || "",
+    slotStart: newSlotStart,
+    address: booking.address,
+    extra: `Was ${formatSlotForDispatch(oldSlotStart)} → Now ${formatSlotForDispatch(newSlotStart)}`,
+    source: "customer_reschedule",
+  });
 
   return NextResponse.json({
     success: true,
