@@ -276,6 +276,39 @@ describe("POST /api/checkout", () => {
     expect(data.error).toContain("payment session");
   });
 
+  it("returns 403 when contact verification is required but missing", async () => {
+    process.env.REQUIRE_CONTACT_VERIFICATION = "true";
+    // verification_codes lookups resolve to no verified record.
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === "verification_codes") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                gte: () => ({
+                  limit: () => ({
+                    returns: () => ({
+                      maybeSingle: vi.fn().mockResolvedValue({ data: null }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return {};
+    });
+
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(403);
+    const data = await res.json();
+    expect(data.email_verified).toBe(false);
+    expect(data.phone_verified).toBe(false);
+
+    delete process.env.REQUIRE_CONTACT_VERIFICATION;
+  });
+
   it("returns 409 when booking lock has expired", async () => {
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === "booking_locks") {

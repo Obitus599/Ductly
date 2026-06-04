@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
 import { vatFromNet, VAT_RATE_PERCENT } from "@/lib/vat";
+import { isContactVerified, normalizeIdentifier } from "@/lib/verification";
 
 /**
  * Pricing: plan tier rate × number of thermostats.
@@ -124,6 +125,27 @@ export async function POST(request: NextRequest) {
         { error: "You must accept the current privacy policy to proceed." },
         { status: 400 }
       );
+    }
+
+    // #7 customer verification gate. Off by default so the flow is
+    // unchanged until the booking-page OTP UI ships; flip
+    // REQUIRE_CONTACT_VERIFICATION=true to enforce. Both the email and
+    // phone must have been verified within the validity window.
+    if (process.env.REQUIRE_CONTACT_VERIFICATION === "true") {
+      const [emailVerified, phoneVerified] = await Promise.all([
+        isContactVerified("email", normalizeIdentifier("email", customer_email)),
+        isContactVerified("sms", normalizeIdentifier("sms", customer_phone)),
+      ]);
+      if (!emailVerified || !phoneVerified) {
+        return NextResponse.json(
+          {
+            error: "Please verify your email and phone before booking.",
+            email_verified: emailVerified,
+            phone_verified: phoneVerified,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const thermostatCount = Math.max(1, Math.min(50, Math.floor(Number(thermostats) || 1)));
