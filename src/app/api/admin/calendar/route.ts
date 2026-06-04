@@ -26,7 +26,7 @@ interface Team {
  * Used by the admin calendar/timeline view.
  */
 export async function GET(request: NextRequest) {
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const { searchParams } = new URL(request.url);

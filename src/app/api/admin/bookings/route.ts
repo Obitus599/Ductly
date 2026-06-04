@@ -16,7 +16,7 @@ interface BookingRow {
 }
 
 export async function GET(request: NextRequest) {
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const supabase = supabaseAdmin;

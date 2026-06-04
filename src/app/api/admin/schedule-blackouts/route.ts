@@ -21,7 +21,7 @@ interface BlackoutRow {
  * optional — without them, returns all future blackouts.
  */
 export async function GET(request: NextRequest) {
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const { searchParams } = new URL(request.url);
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const csrfError = requireSameOrigin(request);
   if (csrfError) return csrfError;
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   let body: { team_id?: string | null; starts_at?: string; ends_at?: string; reason?: string };

@@ -20,7 +20,7 @@ interface ScheduleRow {
 }
 
 export async function GET(request: NextRequest) {
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const supabase = supabaseAdmin;
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const csrfError = requireSameOrigin(request);
   if (csrfError) return csrfError;
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const supabase = supabaseAdmin;
@@ -108,7 +108,7 @@ export async function PATCH(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const csrfError = requireSameOrigin(request);
   if (csrfError) return csrfError;
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const supabase = supabaseAdmin;

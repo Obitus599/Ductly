@@ -15,7 +15,7 @@ import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 export async function POST(request: NextRequest) {
   const csrfError = requireSameOrigin(request);
   if (csrfError) return csrfError;
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   let body: { team_id?: string };

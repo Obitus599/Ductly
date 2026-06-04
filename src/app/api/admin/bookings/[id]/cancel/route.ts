@@ -17,7 +17,7 @@ export async function POST(
 ) {
   const csrfError = requireSameOrigin(request);
   if (csrfError) return csrfError;
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const { id } = await params;

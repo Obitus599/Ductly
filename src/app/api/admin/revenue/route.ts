@@ -18,7 +18,7 @@ interface BookingRow {
  * Bounded to 2000 rows to prevent serverless memory issues.
  */
 export async function GET(request: NextRequest) {
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const { searchParams } = new URL(request.url);

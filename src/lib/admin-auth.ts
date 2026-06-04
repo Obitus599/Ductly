@@ -4,31 +4,48 @@ import { NextRequest, NextResponse } from "next/server";
  * Admin auth check for API routes.
  *
  * Accepts either:
- * 1. admin-token cookie (set by login flow)
- * 2. x-admin-key header (for programmatic access)
+ * 1. x-admin-key header (for programmatic access)
+ * 2. admin-token cookie (set by login flow) — VALIDATED here against
+ *    Supabase, not merely checked for presence.
+ *
+ * Async + fail-closed. We must validate the token ourselves: the
+ * middleware only validates the admin-token for `/admin` *page* paths,
+ * NOT for `/api/*` routes (which start with "/api"), so trusting cookie
+ * presence here would let anyone in with a forged `admin-token=anything`
+ * cookie. Verifying at the gate makes every consumer safe regardless of
+ * middleware path coverage.
  *
  * Returns null if authorized, or a 401 NextResponse if not.
  */
-export function requireAdmin(request: NextRequest): NextResponse | null {
-  // Check cookie-based auth (from login page)
-  const token = request.cookies.get("admin-token")?.value;
-  if (token) {
-    // Token presence is sufficient — middleware already validated it
+export async function requireAdmin(request: NextRequest): Promise<NextResponse | null> {
+  // 1. Programmatic access via shared key (server-to-server, no cookie).
+  const adminKey = process.env.ADMIN_API_KEY;
+  if (adminKey && request.headers.get("x-admin-key") === adminKey) {
     return null;
   }
 
-  // Check header-based auth (for programmatic access)
-  const adminKey = process.env.ADMIN_API_KEY;
-  if (adminKey) {
-    const provided = request.headers.get("x-admin-key");
-    if (provided === adminKey) {
-      return null;
-    }
-  }
-
-  // In development without any key configured, allow access
+  // 2. Dev convenience: no key configured and not production → allow.
   if (!adminKey && process.env.NODE_ENV !== "production") {
     return null;
+  }
+
+  // 3. Cookie-based: validate the Supabase session token. Fail closed.
+  const token = request.cookies.get("admin-token")?.value;
+  if (token) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && serviceKey) {
+      try {
+        const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+          headers: { Authorization: `Bearer ${token}`, apikey: serviceKey },
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (res.ok) return null;
+      } catch (err) {
+        // Network failure / timeout — fail closed.
+        console.error("Admin token validation failed:", err);
+      }
+    }
   }
 
   return NextResponse.json(

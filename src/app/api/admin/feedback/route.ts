@@ -7,7 +7,7 @@ import { requireAdmin } from "@/lib/admin-auth";
  * View feedback entries with team and customer info.
  */
 export async function GET(request: NextRequest) {
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const supabase = supabaseAdmin;

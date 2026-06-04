@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin } from "@/lib/admin-auth";
 
 export async function GET(request: NextRequest) {
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const supabase = supabaseAdmin;

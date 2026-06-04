@@ -11,7 +11,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const { id } = await params;
@@ -89,7 +89,7 @@ export async function PATCH(
 ) {
   const csrfError = requireSameOrigin(request);
   if (csrfError) return csrfError;
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   const { id } = await params;

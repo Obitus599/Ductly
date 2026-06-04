@@ -106,7 +106,7 @@ async function distanceMatrix(
 export async function POST(request: NextRequest) {
   const csrfError = requireSameOrigin(request);
   if (csrfError) return csrfError;
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   // Read API key per-request (supports key rotation without restart)

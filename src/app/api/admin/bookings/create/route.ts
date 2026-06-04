@@ -27,7 +27,7 @@ const PLAN_CONFIG: Record<string, { rate: number; setupMins: number; perThermost
 export async function POST(request: NextRequest) {
   const csrfError = requireSameOrigin(request);
   if (csrfError) return csrfError;
-  const authError = requireAdmin(request);
+  const authError = await requireAdmin(request);
   if (authError) return authError;
 
   // eslint-disable-next-line

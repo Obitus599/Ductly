@@ -1,54 +1,86 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 
 describe("requireAdmin", () => {
+  const realFetch = global.fetch;
   beforeEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    global.fetch = realFetch;
   });
 
-  it("allows request with valid admin-token cookie", () => {
-    const req = new NextRequest("http://localhost:3000/api/admin/bookings", {
-      headers: { cookie: "admin-token=valid-session-token" },
-    });
-    const result = requireAdmin(req);
-    expect(result).toBeNull();
-  });
-
-  it("allows request with valid x-admin-key header", () => {
+  it("allows request with valid x-admin-key header", async () => {
     vi.stubEnv("ADMIN_API_KEY", "secret-admin-key");
     const req = new NextRequest("http://localhost:3000/api/admin/bookings", {
       headers: { "x-admin-key": "secret-admin-key" },
     });
-    const result = requireAdmin(req);
-    expect(result).toBeNull();
+    expect(await requireAdmin(req)).toBeNull();
   });
 
-  it("returns 401 when x-admin-key header does not match", () => {
+  it("returns 401 when x-admin-key header does not match", async () => {
     vi.stubEnv("ADMIN_API_KEY", "secret-admin-key");
     vi.stubEnv("NODE_ENV", "production");
     const req = new NextRequest("http://localhost:3000/api/admin/bookings", {
       headers: { "x-admin-key": "wrong-key" },
     });
-    const result = requireAdmin(req);
+    const result = await requireAdmin(req);
     expect(result).not.toBeNull();
     expect(result!.status).toBe(401);
   });
 
-  it("allows request in dev mode without any auth configured", () => {
+  it("allows request in dev mode without any auth configured", async () => {
     vi.stubEnv("ADMIN_API_KEY", "");
     vi.stubEnv("NODE_ENV", "development");
     const req = new NextRequest("http://localhost:3000/api/admin/bookings");
-    const result = requireAdmin(req);
-    expect(result).toBeNull();
+    expect(await requireAdmin(req)).toBeNull();
   });
 
-  it("returns 401 in production without any credentials", () => {
+  it("returns 401 in production without any credentials", async () => {
     vi.stubEnv("ADMIN_API_KEY", "");
     vi.stubEnv("NODE_ENV", "production");
     const req = new NextRequest("http://localhost:3000/api/admin/bookings");
-    const result = requireAdmin(req);
+    const result = await requireAdmin(req);
     expect(result).not.toBeNull();
+    expect(result!.status).toBe(401);
+  });
+
+  it("VALIDATES the admin-token cookie — allows when Supabase confirms it", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://proj.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
+    global.fetch = vi.fn().mockResolvedValue({ ok: true }) as never;
+    const req = new NextRequest("http://localhost:3000/api/admin/bookings", {
+      headers: { cookie: "admin-token=real-jwt" },
+    });
+    expect(await requireAdmin(req)).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("REJECTS a forged admin-token cookie — presence is not sufficient (401)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://proj.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
+    global.fetch = vi.fn().mockResolvedValue({ ok: false }) as never;
+    const req = new NextRequest("http://localhost:3000/api/admin/bookings", {
+      headers: { cookie: "admin-token=anything" },
+    });
+    const result = await requireAdmin(req);
+    expect(result).not.toBeNull();
+    expect(result!.status).toBe(401);
+  });
+
+  it("fails closed (401) when token validation throws", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://proj.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
+    global.fetch = vi.fn().mockRejectedValue(new Error("network")) as never;
+    const req = new NextRequest("http://localhost:3000/api/admin/bookings", {
+      headers: { cookie: "admin-token=real-jwt" },
+    });
+    const result = await requireAdmin(req);
     expect(result!.status).toBe(401);
   });
 });
