@@ -18,6 +18,13 @@ vi.mock("@/lib/n8n", () => ({
   fireN8nWebhook: (...a: unknown[]) => mockFireN8n(...a),
 }));
 
+const mockSendEmail = vi.fn();
+const mockEmailConfigured = vi.fn();
+vi.mock("@/lib/email", () => ({
+  sendEmail: (...a: unknown[]) => mockSendEmail(...a),
+  emailConfigured: () => mockEmailConfigured(),
+}));
+
 const mockCreateAndStoreCode = vi.fn();
 const mockVerifyCode = vi.fn();
 vi.mock("@/lib/verification", async (importOriginal) => {
@@ -50,6 +57,10 @@ describe("POST /api/verify/send", () => {
     mockCreateAndStoreCode.mockResolvedValue("123456");
     mockWhatsappConfigured.mockReturnValue(true);
     mockSendWhatsAppOtp.mockResolvedValue({ ok: true, sid: "SM1" });
+    // Default email path: SMTP not configured, so the legacy n8n relay is
+    // exercised. The SMTP-specific tests flip emailConfigured on.
+    mockEmailConfigured.mockReturnValue(false);
+    mockSendEmail.mockResolvedValue({ ok: true });
     process.env.VERIFY_CODE_SECRET = "test-pepper";
     process.env.N8N_WEBHOOK_VERIFY_EMAIL = "https://n8n.example.com/webhook/verify-email";
     process.env.TWILIO_CONTENT_SID_DUCTLY_VERIFY = "HXverify";
@@ -108,16 +119,37 @@ describe("POST /api/verify/send", () => {
     expect(res.status).toBe(502);
   });
 
-  it("fires the n8n flow for an email code", async () => {
+  it("sends the email code via SMTP when configured (no n8n)", async () => {
+    mockEmailConfigured.mockReturnValue(true);
     const res = await sendPOST(req(SEND_URL, { channel: "email", identifier: "Alex@Test.com" }));
     expect(res.status).toBe(200);
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    expect(mockFireN8n).not.toHaveBeenCalled();
+    const [opts] = mockSendEmail.mock.calls[0];
+    expect(opts.to).toBe("alex@test.com");
+    expect(opts.subject).toContain("123456");
+    expect(opts.html).toContain("123456");
+    expect(opts.text).toContain("123456");
+  });
+
+  it("502s when the SMTP send fails", async () => {
+    mockEmailConfigured.mockReturnValue(true);
+    mockSendEmail.mockResolvedValueOnce({ ok: false, error: "smtp down" });
+    const res = await sendPOST(req(SEND_URL, { channel: "email", identifier: "alex@test.com" }));
+    expect(res.status).toBe(502);
+  });
+
+  it("falls back to the n8n flow for an email code when SMTP is unset", async () => {
+    const res = await sendPOST(req(SEND_URL, { channel: "email", identifier: "Alex@Test.com" }));
+    expect(res.status).toBe(200);
+    expect(mockSendEmail).not.toHaveBeenCalled();
     expect(mockFireN8n).toHaveBeenCalledTimes(1);
     const [, url, payload] = mockFireN8n.mock.calls[0];
     expect(url).toContain("verify-email");
     expect(payload).toMatchObject({ email: "alex@test.com", code: "123456" });
   });
 
-  it("503s for email when N8N_WEBHOOK_VERIFY_EMAIL is unset", async () => {
+  it("503s for email when neither SMTP nor N8N_WEBHOOK_VERIFY_EMAIL is set", async () => {
     delete process.env.N8N_WEBHOOK_VERIFY_EMAIL;
     const res = await sendPOST(req(SEND_URL, { channel: "email", identifier: "alex@test.com" }));
     expect(res.status).toBe(503);

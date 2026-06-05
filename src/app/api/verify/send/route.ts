@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { fireN8nWebhook } from "@/lib/n8n";
 import { sendWhatsAppOtp, whatsappConfigured } from "@/lib/twilio-whatsapp";
+import { sendEmail, emailConfigured } from "@/lib/email";
+import { renderVerificationEmail } from "@/lib/email-templates";
 import {
   createAndStoreCode,
   normalizeIdentifier,
@@ -16,9 +18,10 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
  * POST /api/verify/send
  * Body: { channel: "email" | "sms", identifier: string }
  *
- * Generates a 6-digit code, stores its hash, and delivers it — SMS via
- * Twilio, email via the n8n email flow. Generic { ok: true } response
- * (we don't leak delivery internals).
+ * Generates a 6-digit code, stores its hash, and delivers it — phone via
+ * WhatsApp (Twilio), email straight over SMTP (rendered in-app; falls back
+ * to the n8n relay only if SMTP isn't configured). Generic { ok: true }
+ * response (we don't leak delivery internals).
  */
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -80,12 +83,27 @@ export async function POST(request: NextRequest) {
       console.error("verify WhatsApp send failed:", result.errorMessage, result.errorCode);
       return NextResponse.json({ error: "Could not send the verification code." }, { status: 502 });
     }
+  } else if (emailConfigured()) {
+    // Preferred path: render the whole email in-app and send it straight
+    // over SMTP. Nothing in the middle can leak raw {{ }} template markup.
+    // Awaited so we can report a real failure to the user.
+    const mail = renderVerificationEmail(code, CODE_TTL_MINUTES);
+    const result = await sendEmail({
+      to: identifier,
+      subject: mail.subject,
+      html: mail.html,
+      text: mail.text,
+    });
+    if (!result.ok) {
+      console.error("verify email send failed:", result.error);
+      return NextResponse.json({ error: "Could not send the verification code." }, { status: 502 });
+    }
   } else {
+    // Fallback: the legacy n8n relay, only if SMTP isn't configured yet.
     const url = process.env.N8N_WEBHOOK_VERIFY_EMAIL;
     if (!url) {
       return NextResponse.json({ error: "Email verification is not configured." }, { status: 503 });
     }
-    // Fire-and-forget through the proven n8n email flow.
     fireN8nWebhook("verify_email", url, {
       event: "verify_email",
       email: identifier,
