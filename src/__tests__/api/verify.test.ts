@@ -6,11 +6,11 @@ vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: (...a: unknown[]) => mockCheckRateLimit(...a),
 }));
 
-const mockSendSms = vi.fn();
-const mockTwilioConfigured = vi.fn();
-vi.mock("@/lib/twilio-sms", () => ({
-  sendSms: (...a: unknown[]) => mockSendSms(...a),
-  twilioConfigured: () => mockTwilioConfigured(),
+const mockSendWhatsAppOtp = vi.fn();
+const mockWhatsappConfigured = vi.fn();
+vi.mock("@/lib/twilio-whatsapp", () => ({
+  sendWhatsAppOtp: (...a: unknown[]) => mockSendWhatsAppOtp(...a),
+  whatsappConfigured: () => mockWhatsappConfigured(),
 }));
 
 const mockFireN8n = vi.fn();
@@ -48,14 +48,16 @@ describe("POST /api/verify/send", () => {
     vi.clearAllMocks();
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockCreateAndStoreCode.mockResolvedValue("123456");
-    mockTwilioConfigured.mockReturnValue(true);
-    mockSendSms.mockResolvedValue({ ok: true, sid: "SM1" });
+    mockWhatsappConfigured.mockReturnValue(true);
+    mockSendWhatsAppOtp.mockResolvedValue({ ok: true, sid: "SM1" });
     process.env.VERIFY_CODE_SECRET = "test-pepper";
     process.env.N8N_WEBHOOK_VERIFY_EMAIL = "https://n8n.example.com/webhook/verify-email";
+    process.env.TWILIO_CONTENT_SID_DUCTLY_VERIFY = "HXverify";
   });
   afterEach(() => {
     delete process.env.VERIFY_CODE_SECRET;
     delete process.env.N8N_WEBHOOK_VERIFY_EMAIL;
+    delete process.env.TWILIO_CONTENT_SID_DUCTLY_VERIFY;
   });
 
   it("rejects an invalid channel", async () => {
@@ -85,17 +87,23 @@ describe("POST /api/verify/send", () => {
     expect(res.status).toBe(503);
   });
 
-  it("sends an SMS code via Twilio", async () => {
+  it("sends the phone code via WhatsApp", async () => {
     const res = await sendPOST(req(SEND_URL, { channel: "sms", identifier: "+971 50 123 4567" }));
     expect(res.status).toBe(200);
-    expect(mockSendSms).toHaveBeenCalledTimes(1);
-    const [to, smsBody] = mockSendSms.mock.calls[0];
+    expect(mockSendWhatsAppOtp).toHaveBeenCalledTimes(1);
+    const [to, code] = mockSendWhatsAppOtp.mock.calls[0];
     expect(to).toBe("+971501234567");
-    expect(smsBody).toContain("123456");
+    expect(code).toBe("123456");
   });
 
-  it("502s when Twilio rejects the SMS", async () => {
-    mockSendSms.mockResolvedValueOnce({ ok: false, errorMessage: "bad" });
+  it("503s when the WhatsApp verify template SID is unset", async () => {
+    delete process.env.TWILIO_CONTENT_SID_DUCTLY_VERIFY;
+    const res = await sendPOST(req(SEND_URL, { channel: "sms", identifier: "+971501234567" }));
+    expect(res.status).toBe(503);
+  });
+
+  it("502s when WhatsApp rejects the send", async () => {
+    mockSendWhatsAppOtp.mockResolvedValueOnce({ ok: false, errorMessage: "bad" });
     const res = await sendPOST(req(SEND_URL, { channel: "sms", identifier: "+971501234567" }));
     expect(res.status).toBe(502);
   });

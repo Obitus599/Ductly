@@ -40,7 +40,7 @@ export default function ContactVerify({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "info" | "error"; text: string } | null>(null);
 
-  const label = channel === "email" ? "email" : "number";
+  const label = channel === "email" ? "email" : "WhatsApp";
 
   async function send() {
     setBusy(true);

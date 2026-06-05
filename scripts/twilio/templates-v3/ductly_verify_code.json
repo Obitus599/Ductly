@@ -1,0 +1,11 @@
+{
+  "friendly_name": "ductly_verify_code",
+  "language": "en",
+  "variables": { "1": "123456" },
+  "types": {
+    "twilio/authentication": {
+      "add_security_recommendation": true,
+      "code_expiration_minutes": 10
+    }
+  }
+}

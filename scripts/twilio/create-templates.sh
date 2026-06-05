@@ -51,14 +51,16 @@ for f in "$TEMPLATES_DIR"/*.json; do
 
   echo "  Created $sid"
 
-  # Submit for WhatsApp/Meta approval. Category UTILITY for all customer-facing
-  # notifications. team_dispatch goes to ops staff, so still UTILITY (internal
-  # business operations notification).
-  echo "  Submitting for Meta approval..."
+  # Submit for WhatsApp/Meta approval. Most templates are UTILITY; OTP
+  # (twilio/authentication) templates must be submitted as AUTHENTICATION.
+  ctype=$(echo "$resp" | python3 -c "import sys,json;d=json.load(sys.stdin);print(next(iter(d.get('types',{}).keys()),''))" 2>/dev/null)
+  category="UTILITY"
+  if [[ "$ctype" == "twilio/authentication" ]]; then category="AUTHENTICATION"; fi
+  echo "  Submitting for Meta approval (category: $category)..."
   approval=$(curl -sS -u "$AUTH" \
     -H "Content-Type: application/json" \
     -X POST "https://content.twilio.com/v1/Content/${sid}/ApprovalRequests/whatsapp" \
-    --data "{\"name\":\"${name}\",\"category\":\"UTILITY\"}")
+    --data "{\"name\":\"${name}\",\"category\":\"${category}\"}")
   echo "$approval" | python3 -m json.tool || true
 
   # Write env var line for this template

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { fireN8nWebhook } from "@/lib/n8n";
-import { sendSms, twilioConfigured } from "@/lib/twilio-sms";
+import { sendWhatsAppOtp, whatsappConfigured } from "@/lib/twilio-whatsapp";
 import {
   createAndStoreCode,
   normalizeIdentifier,
@@ -70,16 +70,15 @@ export async function POST(request: NextRequest) {
   const code = await createAndStoreCode(channel, identifier);
 
   if (channel === "sms") {
-    if (!twilioConfigured()) {
-      return NextResponse.json({ error: "SMS verification is not configured." }, { status: 503 });
+    // Phone codes go over WhatsApp, not SMS — UAE Twilio SMS is blocked
+    // (the sender isn't SMS-capable and UAE A2P SMS is filtered).
+    if (!whatsappConfigured() || !process.env.TWILIO_CONTENT_SID_DUCTLY_VERIFY) {
+      return NextResponse.json({ error: "Phone verification is not configured." }, { status: 503 });
     }
-    const result = await sendSms(
-      identifier,
-      `Your Ductly verification code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes.`
-    );
+    const result = await sendWhatsAppOtp(identifier, code);
     if (!result.ok) {
-      console.error("verify SMS send failed:", result.errorMessage, result.errorCode);
-      return NextResponse.json({ error: "Could not send the SMS code." }, { status: 502 });
+      console.error("verify WhatsApp send failed:", result.errorMessage, result.errorCode);
+      return NextResponse.json({ error: "Could not send the verification code." }, { status: 502 });
     }
   } else {
     const url = process.env.N8N_WEBHOOK_VERIFY_EMAIL;
