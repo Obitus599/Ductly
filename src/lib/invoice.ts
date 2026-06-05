@@ -14,9 +14,14 @@ export interface SupplierConfig {
 
 export function getSupplierConfig(): SupplierConfig {
   return {
-    name: process.env.SUPPLIER_NAME || "Ductly",
+    // Defaults are the registered supplier details; env overrides win.
+    // CONFIRM the exact registered legal-name spelling before invoices go
+    // live. TRN intentionally stays a placeholder until provided.
+    name: process.env.SUPPLIER_NAME || "Ductly Technical Service",
     trn: process.env.SUPPLIER_TRN || "TRN-PENDING",
-    address: process.env.SUPPLIER_ADDRESS || "Dubai, United Arab Emirates",
+    address:
+      process.env.SUPPLIER_ADDRESS ||
+      "Royal House, Office M13, Hor Al Anz East, Dubai, UAE",
   };
 }
 
