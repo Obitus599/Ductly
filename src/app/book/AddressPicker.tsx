@@ -157,8 +157,11 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
+      clickableIcons: true, // let users tap a building/tower to pin it exactly
       styles: [
-        { featureType: "poi", stylers: [{ visibility: "off" }] },
+        // Keep buildings/POIs VISIBLE (so they're tappable) — just drop the
+        // noisy business labels and simplify transit.
+        { featureType: "poi.business", elementType: "labels", stylers: [{ visibility: "off" }] },
         { featureType: "transit", stylers: [{ visibility: "simplified" }] },
       ],
       restriction: {
@@ -175,38 +178,13 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
       visible: !!value.lat,
     });
 
-    // Draggable marker → reverse geocode
-    marker.addListener("dragend", () => {
-      const pos = marker.getPosition();
-      if (pos) {
-        reverseGeocode(pos.lat(), pos.lng());
-      }
-    });
+    const placesService = new google.maps.places.PlacesService(map);
 
-    // Click map → move pin
-    map.addListener("click", (e: google.maps.MapMouseEvent) => {
-      if (e.latLng) {
-        marker.setPosition(e.latLng);
-        marker.setVisible(true);
-        map.panTo(e.latLng);
-        reverseGeocode(e.latLng.lat(), e.latLng.lng());
-      }
-    });
-
-    // Autocomplete
-    const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
-      componentRestrictions: { country: "ae" },
-      fields: ["formatted_address", "geometry", "place_id", "address_components", "name", "types"],
-      // No `types` restriction: returning all prediction kinds lets users
-      // find named buildings/towers (establishments) and POIs, not just
-      // street addresses — important in UAE where most homes are in named
-      // towers without a precise street number.
-    });
-
-    autocomplete.addListener("place_changed", () => {
-      const place = autocomplete.getPlace();
+    // Apply a resolved place (from the search box OR a tapped building) to
+    // the pin + form, capturing the building name + place_id so the marker
+    // lands on the exact building rather than the nearest street.
+    const applyPlace = (place: google.maps.places.PlaceResult) => {
       if (!place.geometry?.location) return;
-
       const lat = place.geometry.location.lat();
       const lng = place.geometry.location.lng();
       const components = place.address_components || [];
@@ -222,15 +200,12 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
       marker.setPosition({ lat, lng });
       marker.setVisible(true);
       map.setCenter({ lat, lng });
-      map.setZoom(16);
+      map.setZoom(17);
 
-      // If the user picked a named building/establishment (e.g. a tower),
-      // autofill the building name field. Plain street addresses have no
-      // meaningful `name` distinct from the street, so we only autofill
-      // for establishment/premise/POI results.
+      // Autofill the building-name field for named establishments/towers.
       const placeTypes = place.types || [];
       const isBuilding = placeTypes.some((t) =>
-        ["establishment", "premise", "point_of_interest"].includes(t)
+        ["establishment", "premise", "subpremise", "point_of_interest"].includes(t)
       );
       const autoBuilding =
         isBuilding && place.name && place.name !== place.formatted_address
@@ -239,7 +214,7 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
 
       onChangeRef.current({
         ...valueRef.current,
-        formatted_address: place.formatted_address || "",
+        formatted_address: place.formatted_address || place.name || "",
         building_name: autoBuilding,
         lat,
         lng,
@@ -247,6 +222,64 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
         area,
         city: city || "Dubai",
       });
+      if (inputRef.current && place.formatted_address) {
+        inputRef.current.value = place.formatted_address;
+      }
+    };
+
+    // Draggable marker → reverse geocode
+    marker.addListener("dragend", () => {
+      const pos = marker.getPosition();
+      if (pos) {
+        reverseGeocode(pos.lat(), pos.lng());
+      }
+    });
+
+    // Map click: if a building/POI icon was tapped, resolve it to the exact
+    // place (precise pin + building name). Otherwise drop the pin and
+    // reverse-geocode the raw coordinates.
+    map.addListener("click", (e: google.maps.MapMouseEvent) => {
+      const placeId = (e as google.maps.IconMouseEvent).placeId;
+      if (placeId) {
+        e.stop();
+        placesService.getDetails(
+          {
+            placeId,
+            fields: ["formatted_address", "geometry", "place_id", "address_components", "name", "types"],
+          },
+          (place, status) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+              applyPlace(place);
+            } else if (e.latLng) {
+              marker.setPosition(e.latLng);
+              marker.setVisible(true);
+              reverseGeocode(e.latLng.lat(), e.latLng.lng());
+            }
+          }
+        );
+        return;
+      }
+      if (e.latLng) {
+        marker.setPosition(e.latLng);
+        marker.setVisible(true);
+        map.panTo(e.latLng);
+        reverseGeocode(e.latLng.lat(), e.latLng.lng());
+      }
+    });
+
+    // Autocomplete — no `types` restriction (so named towers/POIs appear),
+    // biased to the UAE so the right building ranks first.
+    const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
+      componentRestrictions: { country: "ae" },
+      fields: ["formatted_address", "geometry", "place_id", "address_components", "name", "types"],
+      bounds: new google.maps.LatLngBounds(
+        { lat: UAE_BOUNDS.south, lng: UAE_BOUNDS.west },
+        { lat: UAE_BOUNDS.north, lng: UAE_BOUNDS.east }
+      ),
+    });
+
+    autocomplete.addListener("place_changed", () => {
+      applyPlace(autocomplete.getPlace());
     });
 
     mapInstanceRef.current = map;
