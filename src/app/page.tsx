@@ -301,6 +301,104 @@ const processSteps = [
   { num: "03", title: "Mold Elimination", desc: "Mold growth can damage your home and harm your health. Our professional mold cleaning service removes hazardous mold buildup, restores healthy air quality, and protects your home from recurring problems.", img: "/images/process.png" },
 ];
 
+/* Inline SVG service illustrations (#3 — matches the Framer reference:
+   home + leaves, building cluster, mold spores). Crisp + themeable; no
+   raster assets. */
+function ResidentialArt() {
+  return (
+    <svg viewBox="0 0 240 180" width="240" height="180" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="ductArtRes" x1="72" y1="56" x2="168" y2="150" gradientUnits="userSpaceOnUse">
+          <stop stopColor="rgb(147,216,216)" />
+          <stop offset="1" stopColor="rgb(149,207,140)" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="120" cy="158" rx="92" ry="9" fill="rgb(149,207,140)" opacity="0.15" />
+      <path d="M44 102c-20-6-33 3-37 22 20 4 34-4 37-22z" fill="rgb(149,207,140)" opacity="0.85" />
+      <path d="M196 102c20-6 33 3 37 22-20 4-34-4-37-22z" fill="rgb(147,216,216)" opacity="0.85" />
+      <path d="M72 150V94l48-38 48 38v56z" fill="url(#ductArtRes)" />
+      <path d="M62 98l58-46 58 46-8 9-50-40-50 40z" fill="rgb(58,125,68)" />
+      <rect x="108" y="116" width="24" height="34" rx="3" fill="#fff" opacity="0.9" />
+      <rect x="84" y="104" width="18" height="18" rx="3" fill="#fff" opacity="0.75" />
+      <rect x="138" y="104" width="18" height="18" rx="3" fill="#fff" opacity="0.75" />
+      <path d="M120 42c-7-13 2-24 17-26-1 15-8 24-17 26z" fill="rgb(149,207,140)" />
+    </svg>
+  );
+}
+
+function CommercialArt() {
+  return (
+    <svg viewBox="0 0 240 180" width="240" height="180" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="ductArtCom" x1="104" y1="50" x2="146" y2="162" gradientUnits="userSpaceOnUse">
+          <stop stopColor="rgb(147,216,216)" />
+          <stop offset="1" stopColor="rgb(149,207,140)" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="120" cy="164" rx="92" ry="8" fill="rgb(147,216,216)" opacity="0.15" />
+      <rect x="56" y="86" width="42" height="76" rx="4" fill="rgb(147,216,216)" />
+      <rect x="103" y="50" width="44" height="112" rx="4" fill="url(#ductArtCom)" />
+      <rect x="150" y="98" width="34" height="64" rx="4" fill="rgb(120,196,196)" />
+      {[0, 1, 2].map((r) =>
+        [0, 1].map((c) => (
+          <rect key={`l${r}${c}`} x={64 + c * 16} y={96 + r * 18} width="11" height="11" rx="2" fill="#fff" opacity="0.8" />
+        ))
+      )}
+      {[0, 1, 2, 3, 4].map((r) =>
+        [0, 1].map((c) => (
+          <rect key={`m${r}${c}`} x={111 + c * 16} y={60 + r * 19} width="11" height="11" rx="2" fill="#fff" opacity="0.85" />
+        ))
+      )}
+      {[0, 1, 2].map((r) =>
+        [0, 1].map((c) => (
+          <rect key={`r${r}${c}`} x={156 + c * 13} y={108 + r * 16} width="9" height="9" rx="2" fill="#fff" opacity="0.8" />
+        ))
+      )}
+    </svg>
+  );
+}
+
+function MoldArt() {
+  const cilia = (cx: number, cy: number, r: number, n: number, key: string) =>
+    Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * Math.PI * 2;
+      return (
+        <line
+          key={`${key}${i}`}
+          x1={cx + Math.cos(a) * r}
+          y1={cy + Math.sin(a) * r}
+          x2={cx + Math.cos(a) * (r + 7)}
+          y2={cy + Math.sin(a) * (r + 7)}
+          stroke="rgb(190,194,201)"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+      );
+    });
+  return (
+    <svg viewBox="0 0 240 180" width="240" height="180" fill="none" aria-hidden="true">
+      <ellipse cx="120" cy="160" rx="92" ry="9" fill="rgb(176,180,188)" opacity="0.12" />
+      {cilia(96, 96, 30, 14, "a")}
+      <circle cx="96" cy="96" r="30" fill="rgb(193,197,204)" />
+      <circle cx="88" cy="90" r="4.5" fill="rgb(150,155,164)" />
+      <circle cx="104" cy="100" r="6" fill="rgb(150,155,164)" />
+      <circle cx="98" cy="84" r="3" fill="rgb(150,155,164)" />
+      {cilia(154, 110, 22, 11, "b")}
+      <circle cx="154" cy="110" r="22" fill="rgb(206,210,216)" />
+      <circle cx="148" cy="106" r="3.5" fill="rgb(165,170,178)" />
+      <circle cx="160" cy="114" r="4.5" fill="rgb(165,170,178)" />
+      {cilia(150, 64, 14, 9, "c")}
+      <circle cx="150" cy="64" r="14" fill="rgb(199,203,209)" />
+      <circle cx="147" cy="62" r="2.6" fill="rgb(165,170,178)" />
+      <circle cx="64" cy="132" r="3" fill="rgb(206,210,216)" />
+      <circle cx="188" cy="138" r="4" fill="rgb(206,210,216)" />
+      <circle cx="118" cy="130" r="2.4" fill="rgb(206,210,216)" />
+    </svg>
+  );
+}
+
+const PROCESS_ART = [ResidentialArt, CommercialArt, MoldArt];
+
 function ProcessSection() {
   return (
     <section className="py-16">
@@ -330,8 +428,11 @@ function ProcessSection() {
                       <h3 className="text-[24px] font-normal text-[rgb(89,89,89)] leading-[1.3] tracking-[-0.03em]" style={{ fontFamily: "var(--font-heading)" }}>{step.title}</h3>
                     </div>
                     <p className="text-[16px] text-[rgb(109,109,109)] leading-[1.4] tracking-[-0.02em] mb-5 ml-[52px]" style={{ fontFamily: "var(--font-body)" }}>{step.desc}</p>
-                    <div className="relative w-full h-[240px] flex items-center justify-center overflow-hidden">
-                      <Image src={step.img} alt={step.title} width={280} height={200} className="object-contain" />
+                    <div className="relative w-full h-[240px] flex items-center justify-center overflow-hidden" role="img" aria-label={step.title}>
+                      {(() => {
+                        const Art = PROCESS_ART[i] ?? ResidentialArt;
+                        return <Art />;
+                      })()}
                     </div>
                     <div className="absolute bottom-4 right-5 px-3 py-1 rounded-full bg-[rgb(244,244,244)] text-[14px] text-[rgb(174,174,174)] tracking-[-0.02em]" style={{ fontFamily: "var(--font-body)" }}>{step.num}</div>
                   </div>
