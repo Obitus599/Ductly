@@ -515,6 +515,140 @@ function TestimonialsSection() {
   );
 }
 
+/* ─── Trustpilot reviews (#5) ────────────────────────────────────────────── */
+
+const TRUSTPILOT_URL = "https://www.trustpilot.com/review/ductly.ae";
+
+const trustpilotReviews = [
+  {
+    name: "Hasan A",
+    location: "AE",
+    date: "Apr 19, 2026",
+    title: "Ductly - Best in AC duct cleaning",
+    text:
+      "I recently hired Ductly for AC duct cleaning at my home, and the experience was excellent from start to finish. The team arrived on time, explained the process clearly, and worked very professionally throughout the job. They were thorough in cleaning the ducts, removing dust buildup, and ensuring the airflow improved noticeably. What stood out most was their attention to detail and cleanliness — they made sure everything was left neat after the work was completed. The air in my home feels fresher, and the AC seems to be running more efficiently now. Overall, I'm very satisfied with Ductly's service and would definitely recommend them.",
+  },
+  {
+    name: "Nikhil Krishnan",
+    location: "AE",
+    date: "Apr 17, 2026",
+    title: "Had a great experience with the Ductly team",
+    text:
+      "Had a great experience with the Ductly team while cleaning and sanitizing my studio AC. They were punctual, took proper care to cover the entire work area to prevent any dust from spreading onto furniture or the kitchen, and clearly pointed out existing issues on-site even before sharing the before-and-after photos later. They also ensured everything was cleaned up before leaving — floors were spotless and everything was put back exactly as it was. It's rare to come across this level of professionalism these days. Highly recommend them to anyone looking to improve their AC hygiene and enjoy genuinely cleaner air.",
+  },
+];
+
+function trustInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+/** Trustpilot-style row of 5 green star tiles. */
+function TrustStars({ size = 22 }: { size?: number }) {
+  return (
+    <div className="flex gap-1" aria-label="Rated 5 out of 5 stars">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span
+          key={i}
+          className="flex items-center justify-center rounded-[3px]"
+          style={{ width: size, height: size, background: "#00B67A" }}
+        >
+          <svg width={size * 0.72} height={size * 0.72} viewBox="0 0 24 24" fill="white" aria-hidden="true">
+            <path d="M12 17.3l-6.18 3.7 1.64-7.03L2 9.24l7.19-.61L12 2l2.81 6.63 7.19.61-5.46 4.73 1.64 7.03z" />
+          </svg>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function TrustReviewCard({ r }: { r: (typeof trustpilotReviews)[0] }) {
+  return (
+    <div
+      className="rounded-[16px] p-6 flex flex-col"
+      style={{ backgroundColor: "rgb(250,250,250)", border: "1px solid rgb(244,244,244)" }}
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div
+          className="w-10 h-10 rounded-full flex items-center justify-center text-white text-[14px] font-medium shrink-0"
+          style={{
+            background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))",
+            fontFamily: "var(--font-badge)",
+          }}
+        >
+          {trustInitials(r.name)}
+        </div>
+        <div>
+          <p className="text-[14px] font-medium text-black leading-tight" style={{ fontFamily: "var(--font-body)" }}>
+            {r.name}
+          </p>
+          <p className="text-[12px] text-[rgb(153,153,153)] leading-tight" style={{ fontFamily: "var(--font-body)" }}>
+            {r.location} · {r.date}
+          </p>
+        </div>
+      </div>
+      <TrustStars size={20} />
+      <p className="text-[15px] font-medium text-[rgb(61,61,61)] mt-3 mb-1.5" style={{ fontFamily: "var(--font-body)" }}>
+        {r.title}
+      </p>
+      <p className="text-[14px] text-[rgb(109,109,109)] leading-[1.55]" style={{ fontFamily: "var(--font-body)" }}>
+        {r.text}
+      </p>
+    </div>
+  );
+}
+
+function TrustpilotSection() {
+  return (
+    <section className="py-16 overflow-hidden">
+      <div className="mx-auto max-w-[1100px] px-6 lg:px-[80px]">
+        <FadeUp delay={0.1}>
+          <h2
+            className="text-[32px] md:text-[48px] font-normal leading-[1.2] tracking-[-0.05em] text-[rgb(61,61,61)] text-center mb-6"
+            style={{ fontFamily: "var(--font-heading)" }}
+          >
+            Real Stories, Real Results
+          </h2>
+        </FadeUp>
+
+        {/* Trustpilot banner */}
+        <FadeUp delay={0.15}>
+          <div className="flex flex-col items-center gap-2.5 mb-10">
+            <div className="flex items-center gap-2.5">
+              <span className="text-[18px] font-semibold text-[rgb(61,61,61)]" style={{ fontFamily: "var(--font-body)" }}>
+                Excellent
+              </span>
+              <TrustStars size={26} />
+            </div>
+            <a
+              href={TRUSTPILOT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[14px] text-[rgb(109,109,109)] hover:underline"
+              style={{ fontFamily: "var(--font-body)" }}
+            >
+              See all our reviews on{" "}
+              <span style={{ color: "#00B67A", fontWeight: 600 }}>★ Trustpilot</span>
+            </a>
+          </div>
+        </FadeUp>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {trustpilotReviews.map((r) => (
+            <FadeUp key={r.name} delay={0.1}>
+              <TrustReviewCard r={r} />
+            </FadeUp>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─── Stats ──────────────────────────────────────────────────────────────── */
 
 function StatsSection() {
@@ -758,7 +892,9 @@ export default function Home() {
         <FeaturesSection />
         <ProcessSection />
         <PricingSection />
-        <TestimonialsSection />
+        {/* Placeholder testimonials replaced by real Trustpilot reviews (#5).
+            Restore <TestimonialsSection /> if a curated carousel is wanted again. */}
+        <TrustpilotSection />
         <StatsSection />
         <FAQSection />
         <ContactSection />
