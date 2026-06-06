@@ -1,11 +1,15 @@
 {
   "friendly_name": "ductly_verify",
   "language": "en",
-  "variables": { "1": "123456" },
+  "variables": {},
   "types": {
-    "twilio/authentication": {
+    "whatsapp/authentication": {
+      "actions": [
+        { "type": "COPY_CODE", "copy_code_text": "Copy code" }
+      ],
       "add_security_recommendation": true,
-      "code_expiration_minutes": 10
+      "code_expiration_minutes": 10,
+      "body": "{{1}}"
     }
   }
 }

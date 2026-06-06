@@ -52,10 +52,11 @@ for f in "$TEMPLATES_DIR"/*.json; do
   echo "  Created $sid"
 
   # Submit for WhatsApp/Meta approval. Most templates are UTILITY; OTP
-  # (twilio/authentication) templates must be submitted as AUTHENTICATION.
+  # (whatsapp/authentication or twilio/authentication) templates must be
+  # submitted as AUTHENTICATION or Meta rejects them.
   ctype=$(echo "$resp" | python3 -c "import sys,json;d=json.load(sys.stdin);print(next(iter(d.get('types',{}).keys()),''))" 2>/dev/null)
   category="UTILITY"
-  if [[ "$ctype" == "twilio/authentication" ]]; then category="AUTHENTICATION"; fi
+  if [[ "$ctype" == *"authentication" ]]; then category="AUTHENTICATION"; fi
   echo "  Submitting for Meta approval (category: $category)..."
   approval=$(curl -sS -u "$AUTH" \
     -H "Content-Type: application/json" \
