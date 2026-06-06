@@ -86,6 +86,9 @@ function BookingFlow() {
   const [emailVerified, setEmailVerified] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const verificationEnabled = process.env.NEXT_PUBLIC_REQUIRE_CONTACT_VERIFICATION === "true";
+  // Phone verification is gated separately — it rides on WhatsApp (Meta
+  // template approval) while email always works. Off until that's ready.
+  const phoneVerificationEnabled = process.env.NEXT_PUBLIC_REQUIRE_PHONE_VERIFICATION === "true";
   const [propertyType, setPropertyType] = useState<"villa" | "apartment" | "office">("apartment");
   const [bedrooms, setBedrooms] = useState(1);
   const [thermostats, setThermostats] = useState(1);
@@ -325,7 +328,7 @@ function BookingFlow() {
     name.trim() && email.trim() &&
     /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()) &&
     phone.trim() && addressDetails.formatted_address.trim() && thermostats >= 1 &&
-    (!verificationEnabled || (emailVerified && phoneVerified))
+    (!verificationEnabled || (emailVerified && (!phoneVerificationEnabled || phoneVerified)))
   );
 
   const bedroomLabel = propertyType === "office" ? "N/A" : bedrooms === 0 ? "Studio" : `${bedrooms} bedroom${bedrooms > 1 ? "s" : ""}`;
@@ -377,6 +380,7 @@ function BookingFlow() {
           onContinue={() => { setError(""); setStep("calendar"); }}
           valid={detailsValid}
           verificationEnabled={verificationEnabled}
+          phoneVerificationEnabled={phoneVerificationEnabled}
           emailVerified={emailVerified} setEmailVerified={setEmailVerified}
           phoneVerified={phoneVerified} setPhoneVerified={setPhoneVerified}
         />

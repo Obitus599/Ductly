@@ -129,21 +129,32 @@ export async function POST(request: NextRequest) {
 
     // #7 customer verification gate. Off by default so the flow is
     // unchanged until the booking-page OTP UI ships.
-    // IMPORTANT: enable BOTH flags together —
-    //   REQUIRE_CONTACT_VERIFICATION=true            (this server gate)
-    //   NEXT_PUBLIC_REQUIRE_CONTACT_VERIFICATION=true (renders the OTP UI)
-    // Setting only this server flag renders no OTP UI, so customers can
-    // never verify and every checkout 403s — a full booking outage.
-    // Both the email and phone must be verified within the validity window.
+    //
+    // Email and phone are gated INDEPENDENTLY, because phone OTP rides on
+    // WhatsApp (needs a Meta-approved template) while email (Resend) is
+    // always available. So:
+    //   REQUIRE_CONTACT_VERIFICATION=true  → require a verified EMAIL
+    //   REQUIRE_PHONE_VERIFICATION=true    → ALSO require a verified phone
+    // Phone is only required when its own flag is on — otherwise an
+    // un-verifiable phone (template pending) would block every booking.
+    //
+    // IMPORTANT: pair each server flag with its NEXT_PUBLIC_ twin so the
+    // matching OTP UI renders — a server flag with no UI means customers
+    // can never verify and every checkout 403s (a full booking outage).
     if (process.env.REQUIRE_CONTACT_VERIFICATION === "true") {
+      const requirePhone = process.env.REQUIRE_PHONE_VERIFICATION === "true";
       const [emailVerified, phoneVerified] = await Promise.all([
         isContactVerified("email", normalizeIdentifier("email", customer_email)),
-        isContactVerified("sms", normalizeIdentifier("sms", customer_phone)),
+        requirePhone
+          ? isContactVerified("sms", normalizeIdentifier("sms", customer_phone))
+          : Promise.resolve(true),
       ]);
       if (!emailVerified || !phoneVerified) {
         return NextResponse.json(
           {
-            error: "Please verify your email and phone before booking.",
+            error: requirePhone
+              ? "Please verify your email and phone before booking."
+              : "Please verify your email before booking.",
             email_verified: emailVerified,
             phone_verified: phoneVerified,
           },

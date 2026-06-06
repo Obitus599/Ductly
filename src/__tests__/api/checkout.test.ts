@@ -276,9 +276,8 @@ describe("POST /api/checkout", () => {
     expect(data.error).toContain("payment session");
   });
 
-  it("returns 403 when contact verification is required but missing", async () => {
-    process.env.REQUIRE_CONTACT_VERIFICATION = "true";
-    // verification_codes lookups resolve to no verified record.
+  // No verification record exists for any identifier.
+  function mockNoVerifiedContact() {
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === "verification_codes") {
         return {
@@ -299,12 +298,35 @@ describe("POST /api/checkout", () => {
       }
       return {};
     });
+  }
+
+  it("returns 403 when both email and phone verification are required but missing", async () => {
+    process.env.REQUIRE_CONTACT_VERIFICATION = "true";
+    process.env.REQUIRE_PHONE_VERIFICATION = "true";
+    mockNoVerifiedContact();
 
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(403);
     const data = await res.json();
     expect(data.email_verified).toBe(false);
     expect(data.phone_verified).toBe(false);
+
+    delete process.env.REQUIRE_CONTACT_VERIFICATION;
+    delete process.env.REQUIRE_PHONE_VERIFICATION;
+  });
+
+  it("does not require phone when only email verification is enabled", async () => {
+    // Email-only posture: phone is treated as satisfied (not queried), so a
+    // missing email is the only thing that can block — phone never does.
+    process.env.REQUIRE_CONTACT_VERIFICATION = "true";
+    delete process.env.REQUIRE_PHONE_VERIFICATION;
+    mockNoVerifiedContact();
+
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(403);
+    const data = await res.json();
+    expect(data.email_verified).toBe(false);
+    expect(data.phone_verified).toBe(true); // not required → reported satisfied
 
     delete process.env.REQUIRE_CONTACT_VERIFICATION;
   });

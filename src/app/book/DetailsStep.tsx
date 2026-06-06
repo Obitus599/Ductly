@@ -21,8 +21,10 @@ interface DetailsStepProps {
   setThermostats: (v: number) => void;
   onContinue: () => void;
   valid: boolean;
-  /** #7: when true, render the email/phone OTP verification UI. */
+  /** #7: when true, render the email OTP verification UI. */
   verificationEnabled: boolean;
+  /** #7: when true, also render the phone (WhatsApp) OTP verification UI. */
+  phoneVerificationEnabled: boolean;
   emailVerified: boolean;
   setEmailVerified: (v: boolean) => void;
   phoneVerified: boolean;
@@ -34,7 +36,8 @@ export default function DetailsStep({
   addressDetails, setAddressDetails, propertyType, setPropertyType,
   bedrooms, setBedrooms, thermostats, setThermostats,
   onContinue, valid,
-  verificationEnabled, emailVerified, setEmailVerified, phoneVerified, setPhoneVerified,
+  verificationEnabled, phoneVerificationEnabled,
+  emailVerified, setEmailVerified, phoneVerified, setPhoneVerified,
 }: DetailsStepProps) {
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
   const phoneDigits = phone.replace(/[^0-9]/g, "");
@@ -94,7 +97,7 @@ export default function DetailsStep({
               placeholder="+971 50 123 4567"
               className={INPUT} style={{ fontFamily: "var(--font-body)" }}
             />
-            {verificationEnabled && (
+            {verificationEnabled && phoneVerificationEnabled && (
               <ContactVerify
                 channel="sms"
                 value={phone.trim()}
