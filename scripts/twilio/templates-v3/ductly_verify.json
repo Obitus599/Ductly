@@ -1,5 +1,5 @@
 {
-  "friendly_name": "ductly_verify_code",
+  "friendly_name": "ductly_verify",
   "language": "en",
   "variables": { "1": "123456" },
   "types": {

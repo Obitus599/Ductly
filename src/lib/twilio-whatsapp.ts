@@ -74,8 +74,9 @@ export async function sendWhatsAppTemplate(
 }
 
 /**
- * Deliver a verification OTP over WhatsApp via the ductly_verify_code
- * authentication template (variable {{1}} = the code).
+ * Deliver a verification OTP over WhatsApp via the ductly_verify
+ * authentication template (variable {{1}} = the code). The script-generated
+ * env var TWILIO_CONTENT_SID_DUCTLY_VERIFY derives from that template name.
  */
 export async function sendWhatsAppOtp(to: string, code: string): Promise<WaResult> {
   const contentSid = process.env.TWILIO_CONTENT_SID_DUCTLY_VERIFY;
