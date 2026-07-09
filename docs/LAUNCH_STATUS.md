@@ -1,9 +1,47 @@
 # Launch Status — Ductly UAE
 
-**Last updated:** 2026-05-21
+**Last updated:** 2026-07-09
 **Maintainer:** Mattia (solo founder)
-**Status:** App is production-ready except for WhatsApp; team dispatch
-falls back to email + manual relay until WhatsApp is unblocked.
+**Status:** App is production-ready. WhatsApp sender is now live (Twilio
+accepting sends). Production domain still on the "Coming Soon" placeholder —
+the working app runs on staging.
+
+---
+
+## Update — 2026-07-09
+
+Picking this back up after ~1 month idle (last commit 2026-06-06). What's
+changed since the 2026-05-21 status below:
+
+### WhatsApp is unblocked
+The zombie `ON_PREMISE` state appears resolved. A live probe of
+`POST staging.ductly.ae/api/verify/send` with a valid UAE E.164 number
+returned `200 {"ok":true}` — the route only 200s when Twilio *accepts* the
+WhatsApp send, so the sender is registered and sending. **Still to do:**
+confirm end-to-end delivery to a real handset (the probe used a throwaway
+number, which Twilio accepts at submission but can't deliver). The whole
+"operational survival / manual relay" framing below is now the fallback,
+not the default.
+
+### Shipped since the 2026-05-21 doc (all merged to `main`)
+| Area | Detail |
+|---|---|
+| Email OTP | Sent **directly via Resend** — the whole email is rendered in-app and posted over SMTP, so nothing can leak raw `{{ }}` markup ([lib/email.ts](../src/lib/email.ts), [lib/email-templates.ts](../src/lib/email-templates.ts)). n8n relay kept only as a fallback. |
+| Phone OTP | Rides **WhatsApp**, not SMS (UAE A2P SMS is filtered). `ductly_verify` authentication template, code in `{{1}}` ([lib/twilio-whatsapp.ts](../src/lib/twilio-whatsapp.ts)). |
+| Independent gating | `REQUIRE_CONTACT_VERIFICATION` gates email; `REQUIRE_PHONE_VERIFICATION` gates phone separately — each server flag must pair with its `NEXT_PUBLIC_` twin or checkout 403s ([api/checkout/route.ts](../src/app/api/checkout/route.ts)). |
+| FTA tax invoices | PDF generation + admin-triggered issue ([lib/invoice-pdf.ts](../src/lib/invoice-pdf.ts), [api/invoices/[bookingId]](../src/app/api/invoices/[bookingId]/route.ts)). |
+| Job completion | Inbound Twilio webhook + completion flow ([api/webhooks/twilio](../src/app/api/webhooks/twilio/route.ts), [lib/job-completion.ts](../src/lib/job-completion.ts)). |
+| Pricing | VAT-exclusive booking financial snapshot persisted at checkout for the invoice. |
+
+### Fixed this session (2026-07-09)
+| Fix | Detail |
+|---|---|
+| **Booking-page phone bug** | Customers entering the local `05x` format (e.g. `0503089244`) got "could not send the code" — the number reached Twilio unprefixed and was rejected as non-E.164. New [lib/phone-uae.ts](../src/lib/phone-uae.ts) canonicalizes `05x` / `+971` / `00971` / bare-NSN → `+9715XXXXXXXX`, wired through verify-send, verify-check, and checkout. Booking page now shows a "UAE mobile numbers only" disclaimer and auto-formats to `+971 …` on blur. Checkout hard-rejects non-UAE numbers. |
+| **Deploy restart** | CI deploy only touched `tmp/restart.txt` (a no-op for the pm2-managed app per the 2026-06 finding). Now runs `pm2 restart ductly --update-env` too ([.github/workflows/ci.yml](../.github/workflows/ci.yml)). **Verify:** the deploy job `cd httpdocs` + health-checks `staging.ductly.ae` — confirm which vhost it actually targets. |
+
+### Code health
+CI green: typecheck clean, **377 unit/integration tests pass**. Staging
+healthy (Supabase ok), n8n up.
 
 ---
 

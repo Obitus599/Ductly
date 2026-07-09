@@ -114,8 +114,14 @@ jobs:
             git reset --hard origin/main
             npm ci
             npx next build
-            # Plesk runs the app via Phusion Passenger (not pm2). Passenger
-            # reloads when tmp/restart.txt is touched.
+            # Reload the running app. The served process is managed by pm2
+            # (confirmed 2026-06: env/code changes only took effect after a
+            # pm2 restart; touching tmp/restart.txt alone was a no-op). We do
+            # BOTH so whichever front is actually live gets picked up:
+            #   1. pm2 restart — the confirmed reload path for the app process
+            #   2. touch tmp/restart.txt — harmless belt-and-suspenders in case
+            #      a Passenger front is still in play for any vhost.
+            pm2 restart ductly --update-env || echo "pm2 restart failed (continuing)"
             mkdir -p tmp && touch tmp/restart.txt
 
       - name: Post-deploy health check
