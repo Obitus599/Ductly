@@ -3,6 +3,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { INPUT, LABEL } from "./shared";
 
+// Google calls this global when the Maps JS auth fails at runtime (billing
+// disabled, key/referrer/API restriction). Without a hook we'd be stuck
+// showing Google's watermarked "development purposes only" map + error
+// dialog; instead we flip to the manual address input so bookings continue.
+declare global {
+  interface Window {
+    gm_authFailure?: () => void;
+  }
+}
+
 /* ─── Types ─────────────────────────────────────────────────────────── */
 
 export interface AddressDetails {
@@ -90,7 +100,9 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const [mapsLoaded, setMapsLoaded] = useState(false);
-  const [noApiKey, setNoApiKey] = useState(false);
+  // True when Maps can't be used (no key, script blocked, or Google auth
+  // failure such as disabled billing) — we then render the manual input.
+  const [mapsUnavailable, setMapsUnavailable] = useState(false);
 
   // Track changes without causing re-render loops
   const valueRef = useRef(value);
@@ -100,9 +112,31 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
 
   /* ── Load Google Maps ── */
   useEffect(() => {
+    // Hard auth failures (InvalidKey / RefererNotAllowed / ApiNotActivated)
+    // invoke gm_authFailure.
+    window.gm_authFailure = () => setMapsUnavailable(true);
+
+    // BillingNotEnabledMapError (the "for development purposes only"
+    // watermark + error dialog) does NOT call gm_authFailure — Google only
+    // logs it to console.error. Sniff that one signature so the booking
+    // flow still degrades to the manual address input. Installed before the
+    // Maps script is appended, so it's in place when the error fires.
+    const origError = console.error;
+    console.error = (...args: unknown[]) => {
+      if (args.some((a) => typeof a === "string" && a.includes("Google Maps JavaScript API error"))) {
+        setMapsUnavailable(true);
+      }
+      origError(...args);
+    };
+
     loadGoogleMaps()
       .then(() => setMapsLoaded(true))
-      .catch(() => setNoApiKey(true));
+      .catch(() => setMapsUnavailable(true));
+
+    return () => {
+      window.gm_authFailure = undefined;
+      console.error = origError;
+    };
   }, []);
 
   /* ── Reverse geocode a latlng ── */
@@ -286,7 +320,7 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
     markerRef.current = marker;
     autocompleteRef.current = autocomplete;
     } catch {
-      setNoApiKey(true);
+      setMapsUnavailable(true);
     }
   }, [mapsLoaded, reverseGeocode, value.lat, value.lng]);
 
@@ -295,8 +329,8 @@ export default function AddressPicker({ value, onChange }: AddressPickerProps) {
     onChange({ ...value, [field]: val });
   }
 
-  /* ── Fallback: no API key → simple text input ── */
-  if (noApiKey) {
+  /* ── Fallback: maps unavailable → simple text input ── */
+  if (mapsUnavailable) {
     return (
       <div className="space-y-5">
         <div>
