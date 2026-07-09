@@ -1,0 +1,10 @@
+{
+  "friendly_name": "ductly_ping",
+  "language": "en",
+  "variables": { "1": "Team Alpha" },
+  "types": {
+    "twilio/text": {
+      "body": "Hello {{1}}. This is a Ductly dispatch reachability check. Receiving this message confirms your WhatsApp number is set up to get job assignments. No action is needed."
+    }
+  }
+}

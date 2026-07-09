@@ -80,7 +80,7 @@ export default function TeamsPage() {
         setPingResult({
           teamId,
           ok: true,
-          message: `Test SMS sent (Twilio status: ${data.status})`,
+          message: `Test WhatsApp sent (Twilio status: ${data.status})`,
         });
       } else {
         const detail = data.twilio_message

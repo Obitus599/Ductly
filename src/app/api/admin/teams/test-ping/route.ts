@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
-import { sendSms, twilioConfigured } from "@/lib/twilio-sms";
+import { sendWhatsAppTemplate, whatsappConfigured } from "@/lib/twilio-whatsapp";
 
 /**
  * POST /api/admin/teams/test-ping
  * Body: { team_id: string }
  *
- * Sends a Twilio SMS to the team's number so admin can verify it's
- * reachable before a real dispatch goes out. SMS not WhatsApp on
- * purpose — it needs no template approval and works regardless of the
- * WhatsApp Business sender state.
- *
- * Delivery goes through sendSms(), which strips any "whatsapp:" prefix
- * off the From so From and To are on the SAME (SMS) channel. Sending
- * the WhatsApp-prefixed From with a plain To is what produced Twilio's
- * "Invalid From and To pair. From and To should be of the same channel"
- * rejection.
+ * Sends the `ductly_ping` WhatsApp template to the team's number so
+ * admin can verify it's reachable on the SAME channel a real dispatch
+ * uses. SMS is not an option here: the Twilio sender is a WhatsApp-only
+ * number (not SMS-capable), so an SMS From is rejected as "not a Twilio
+ * phone number". Business-initiated WhatsApp needs an approved template,
+ * hence the dedicated ductly_ping utility template (variable 1 = team
+ * name), configured via TWILIO_CONTENT_SID_DUCTLY_PING.
  */
 export async function POST(request: NextRequest) {
   const csrfError = requireSameOrigin(request);
@@ -35,11 +32,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "team_id is required." }, { status: 400 });
   }
 
-  if (!twilioConfigured()) {
+  if (!whatsappConfigured()) {
     return NextResponse.json(
       {
         error:
-          "Twilio not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_SMS_FROM (or TWILIO_WHATSAPP_FROM).",
+          "Twilio not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM.",
+      },
+      { status: 503 }
+    );
+  }
+
+  const contentSid = process.env.TWILIO_CONTENT_SID_DUCTLY_PING;
+  if (!contentSid) {
+    return NextResponse.json(
+      {
+        error:
+          "Ping template not configured. Create the ductly_ping template (scripts/twilio) and set TWILIO_CONTENT_SID_DUCTLY_PING.",
       },
       { status: 503 }
     );
@@ -63,12 +71,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // E.164 for the response; sendSms normalizes the To identically.
+  // E.164 for the response; sendWhatsAppTemplate wraps both From and To
+  // as whatsapp:<number> so the channels match.
   const to = team.whatsapp_number.replace(/[^0-9+]/g, "");
-  const result = await sendSms(
-    to,
-    `Ductly dispatch test ping for ${team.name}. If you received this, your number is reachable.`
-  );
+  const result = await sendWhatsAppTemplate(to, contentSid, { "1": team.name });
 
   if (!result.ok) {
     return NextResponse.json(
