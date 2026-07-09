@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { supabaseAdmin } from "@/utils/supabase/admin";
+import { normalizeUaePhone } from "@/lib/phone-uae";
 
 /**
  * Customer contact verification (#7) — OTP codes for email + phone on
@@ -37,10 +38,18 @@ export function verificationConfigured(): boolean {
   return Boolean(process.env.VERIFY_CODE_SECRET);
 }
 
-/** Normalize an identifier: lowercase email; digits-and-plus for phone. */
+/**
+ * Normalize an identifier: lowercase email; canonical E.164 for phone.
+ *
+ * Phone numbers resolve to UAE E.164 (+9715XXXXXXXX) so that the local
+ * (05x) and international (+971) forms of the same number key to one
+ * identifier across send / check / checkout. Anything not a UAE mobile
+ * falls back to a bare digits-and-plus string, which the callers' UAE
+ * validation then rejects with a clear message.
+ */
 export function normalizeIdentifier(channel: VerifyChannel, raw: string): string {
   if (channel === "email") return raw.trim().toLowerCase();
-  return raw.replace(/[^0-9+]/g, "");
+  return normalizeUaePhone(raw) ?? raw.replace(/[^0-9+]/g, "");
 }
 
 /** Cryptographically-random zero-padded 6-digit code. */

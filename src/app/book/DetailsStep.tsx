@@ -3,6 +3,7 @@
 import { CARD, CTA, INPUT, LABEL } from "./shared";
 import AddressPicker, { type AddressDetails } from "./AddressPicker";
 import ContactVerify from "./ContactVerify";
+import { isUaeMobile, formatUaePhone } from "@/lib/phone-uae";
 
 interface DetailsStepProps {
   name: string;
@@ -40,8 +41,15 @@ export default function DetailsStep({
   emailVerified, setEmailVerified, phoneVerified, setPhoneVerified,
 }: DetailsStepProps) {
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
-  const phoneDigits = phone.replace(/[^0-9]/g, "");
-  const phoneValid = phoneDigits.length >= 7 && phoneDigits.length <= 15;
+  const phoneValid = isUaeMobile(phone);
+  // On blur, tidy a valid number into its canonical +971 form so the code
+  // and the customer both see the same thing. Skip once verified, since
+  // rewriting `phone` would clear the verified badge (page resets it on change).
+  const tidyPhone = () => {
+    if (phoneVerified) return;
+    const pretty = formatUaePhone(phone);
+    if (pretty !== phone) setPhone(pretty);
+  };
   return (
     <div className="p-7 md:p-10" style={CARD}>
       <h2
@@ -94,9 +102,17 @@ export default function DetailsStep({
             <input
               id="book-phone" type="tel" value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+971 50 123 4567"
+              onBlur={tidyPhone}
+              inputMode="tel"
+              placeholder="050 123 4567"
               className={INPUT} style={{ fontFamily: "var(--font-body)" }}
             />
+            <p
+              className="mt-1.5 text-[12px] text-[rgb(140,140,140)]"
+              style={{ fontFamily: "var(--font-body)" }}
+            >
+              UAE mobile numbers only — e.g. 050 123 4567 or +971 50 123 4567.
+            </p>
             {verificationEnabled && phoneVerificationEnabled && (
               <ContactVerify
                 channel="sms"

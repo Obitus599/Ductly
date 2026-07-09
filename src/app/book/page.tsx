@@ -8,6 +8,7 @@ import CalendarStep from "./CalendarStep";
 import CheckoutStep from "./CheckoutStep";
 import { type AddressDetails, EMPTY_ADDRESS } from "./AddressPicker";
 import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
+import { isUaeMobile } from "@/lib/phone-uae";
 
 /* ─── Step Indicator ────────────────────────────────────────────────── */
 
@@ -327,7 +328,7 @@ function BookingFlow() {
   const detailsValid = !!(
     name.trim() && email.trim() &&
     /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()) &&
-    phone.trim() && addressDetails.formatted_address.trim() && thermostats >= 1 &&
+    isUaeMobile(phone) && addressDetails.formatted_address.trim() && thermostats >= 1 &&
     (!verificationEnabled || (emailVerified && (!phoneVerificationEnabled || phoneVerified)))
   );
 

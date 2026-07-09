@@ -4,6 +4,7 @@ import { fireN8nWebhook } from "@/lib/n8n";
 import { sendWhatsAppOtp, whatsappConfigured } from "@/lib/twilio-whatsapp";
 import { sendEmail, emailConfigured } from "@/lib/email";
 import { renderVerificationEmail } from "@/lib/email-templates";
+import { isUaeMobile } from "@/lib/phone-uae";
 import {
   createAndStoreCode,
   normalizeIdentifier,
@@ -49,11 +50,13 @@ export async function POST(request: NextRequest) {
   if (channel === "email" && !EMAIL_RE.test(identifier)) {
     return NextResponse.json({ error: "Invalid email address." }, { status: 400 });
   }
-  if (channel === "sms") {
-    const digits = identifier.replace(/[^0-9]/g, "");
-    if (digits.length < 7 || digits.length > 15) {
-      return NextResponse.json({ error: "Invalid phone number." }, { status: 400 });
-    }
+  if (channel === "sms" && !isUaeMobile(identifier)) {
+    // Reject non-UAE numbers here with a clear message rather than letting
+    // Twilio bounce a non-E.164 address with an opaque 502.
+    return NextResponse.json(
+      { error: "Enter a valid UAE mobile number (e.g. 050 123 4567)." },
+      { status: 400 }
+    );
   }
 
   // Per-identifier throttle so a single email/phone can't be code-bombed.

@@ -107,6 +107,23 @@ describe("POST /api/verify/send", () => {
     expect(code).toBe("123456");
   });
 
+  it("normalizes a local 05x number to E.164 before sending (bug fix)", async () => {
+    // The reported failure: "0503089244" reached Twilio unprefixed and was
+    // rejected. It must now be canonicalized to +971503089244.
+    const res = await sendPOST(req(SEND_URL, { channel: "sms", identifier: "0503089244" }));
+    expect(res.status).toBe(200);
+    expect(mockSendWhatsAppOtp).toHaveBeenCalledTimes(1);
+    expect(mockSendWhatsAppOtp.mock.calls[0][0]).toBe("+971503089244");
+  });
+
+  it("400s a non-UAE number with a helpful message", async () => {
+    const res = await sendPOST(req(SEND_URL, { channel: "sms", identifier: "+14155552671" }));
+    expect(res.status).toBe(400);
+    expect(mockSendWhatsAppOtp).not.toHaveBeenCalled();
+    const body = await res.json();
+    expect(body.error).toMatch(/UAE mobile/i);
+  });
+
   it("503s when the WhatsApp verify template SID is unset", async () => {
     delete process.env.TWILIO_CONTENT_SID_DUCTLY_VERIFY;
     const res = await sendPOST(req(SEND_URL, { channel: "sms", identifier: "+971501234567" }));

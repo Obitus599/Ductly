@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
 import { vatFromNet, VAT_RATE_PERCENT } from "@/lib/vat";
 import { isContactVerified, normalizeIdentifier } from "@/lib/verification";
+import { isUaeMobile } from "@/lib/phone-uae";
 
 /**
  * Pricing: plan tier rate × number of thermostats.
@@ -86,11 +87,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate phone: must contain at least 7 digits, may include +, spaces, dashes
-    const phoneDigits = customer_phone.replace(/[^0-9]/g, "");
-    if (phoneDigits.length < 7 || phoneDigits.length > 15 || !/^\+?[\d\s-]{7,20}$/.test(customer_phone)) {
+    // Validate phone: UAE mobile only (accepts 05x, +971, 00971 — all
+    // canonicalized to E.164 for storage below). Ductly is UAE-only and
+    // dispatch/OTP both need a deliverable UAE number.
+    if (!isUaeMobile(customer_phone)) {
       return NextResponse.json(
-        { error: "Invalid phone number." },
+        { error: "Enter a valid UAE mobile number (e.g. 050 123 4567)." },
         { status: 400 }
       );
     }
