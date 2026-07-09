@@ -42,6 +42,7 @@ describe("POST /api/admin/teams/test-ping", () => {
     delete process.env.TWILIO_ACCOUNT_SID;
     delete process.env.TWILIO_AUTH_TOKEN;
     delete process.env.TWILIO_WHATSAPP_FROM;
+    delete process.env.TWILIO_SMS_FROM;
   });
 
   it("returns 400 when team_id is missing", async () => {
@@ -112,6 +113,33 @@ describe("POST /api/admin/teams/test-ping", () => {
     const data = await res.json();
     expect(data.twilio_status).toBe(401);
     expect(data.twilio_message).toBe("auth failed");
+  });
+
+  it("strips the whatsapp: prefix so From and To share the SMS channel", async () => {
+    // Regression: TWILIO_WHATSAPP_FROM carries a "whatsapp:" prefix. Sent
+    // as-is against a plain To, Twilio rejects with "Invalid From and To
+    // pair. From and To should be of the same channel." The From must be
+    // stripped to a bare number so both sides are SMS.
+    process.env.TWILIO_ACCOUNT_SID = "ACxxx";
+    process.env.TWILIO_AUTH_TOKEN = "tok";
+    process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+15551234567";
+    mockTeamLookup({ id: "t1", name: "Alpha", whatsapp_number: "+971561113186" });
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ sid: "SMxxx", status: "queued" }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const { POST } = await import("@/app/api/admin/teams/test-ping/route");
+    const res = await POST(makeRequest({ team_id: "t1" }));
+    expect(res.status).toBe(200);
+
+    const [, opts] = mockFetch.mock.calls[0];
+    const params = new URLSearchParams(opts.body as string);
+    expect(params.get("From")).toBe("+15551234567"); // no whatsapp: prefix
+    expect(params.get("To")).toBe("+971561113186"); // same (SMS) channel
   });
 
   it("returns success when Twilio accepts the send", async () => {

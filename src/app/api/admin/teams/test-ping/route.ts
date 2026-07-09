@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
+import { sendSms, twilioConfigured } from "@/lib/twilio-sms";
 
 /**
  * POST /api/admin/teams/test-ping
  * Body: { team_id: string }
  *
- * Sends a Twilio SMS to the team's WhatsApp number so admin can
- * verify the number is reachable before a real dispatch goes out.
- * SMS not WhatsApp on purpose — SMS doesn't need template approval
- * and works the moment Twilio creds are configured, regardless of
- * the WhatsApp Business sender state.
+ * Sends a Twilio SMS to the team's number so admin can verify it's
+ * reachable before a real dispatch goes out. SMS not WhatsApp on
+ * purpose — it needs no template approval and works regardless of the
+ * WhatsApp Business sender state.
+ *
+ * Delivery goes through sendSms(), which strips any "whatsapp:" prefix
+ * off the From so From and To are on the SAME (SMS) channel. Sending
+ * the WhatsApp-prefixed From with a plain To is what produced Twilio's
+ * "Invalid From and To pair. From and To should be of the same channel"
+ * rejection.
  */
 export async function POST(request: NextRequest) {
   const csrfError = requireSameOrigin(request);
@@ -29,14 +35,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "team_id is required." }, { status: 400 });
   }
 
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
-  if (!sid || !token || !fromNumber) {
+  if (!twilioConfigured()) {
     return NextResponse.json(
       {
         error:
-          "Twilio not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM.",
+          "Twilio not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_SMS_FROM (or TWILIO_WHATSAPP_FROM).",
       },
       { status: 503 }
     );
@@ -60,38 +63,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Twilio expects E.164 (+9715...) — strip everything except digits and +
+  // E.164 for the response; sendSms normalizes the To identically.
   const to = team.whatsapp_number.replace(/[^0-9+]/g, "");
-
-  const params = new URLSearchParams();
-  params.set("From", fromNumber);
-  params.set("To", to);
-  params.set(
-    "Body",
+  const result = await sendSms(
+    to,
     `Ductly dispatch test ping for ${team.name}. If you received this, your number is reachable.`
   );
 
-  const twilioRes = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    }
-  );
-
-  const twilioJson = await twilioRes.json().catch(() => ({}));
-
-  if (!twilioRes.ok) {
+  if (!result.ok) {
     return NextResponse.json(
       {
         error: "Twilio rejected the send.",
-        twilio_status: twilioRes.status,
-        twilio_message: twilioJson.message ?? null,
-        twilio_code: twilioJson.code ?? null,
+        twilio_status: result.status ?? null,
+        twilio_message: result.errorMessage ?? null,
+        twilio_code: result.errorCode ?? null,
       },
       { status: 502 }
     );
@@ -100,7 +85,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     to,
-    sid: twilioJson.sid,
-    status: twilioJson.status,
+    sid: result.sid,
+    status: result.status,
   });
 }
