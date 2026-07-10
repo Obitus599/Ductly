@@ -6,11 +6,10 @@ import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
  * POST /api/admin/teams/test-ping
  * Body: { team_id: string }
  *
- * Sends a Twilio SMS to the team's WhatsApp number so admin can
+ * Sends a WhatsApp template message to the team's number so admin can
  * verify the number is reachable before a real dispatch goes out.
- * SMS not WhatsApp on purpose — SMS doesn't need template approval
- * and works the moment Twilio creds are configured, regardless of
- * the WhatsApp Business sender state.
+ * Uses the ductly_ping WhatsApp template (Content API) — the template
+ * must be created and Meta-approved in Twilio Content Builder first.
  */
 export async function POST(request: NextRequest) {
   const csrfError = requireSameOrigin(request);
@@ -42,6 +41,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const contentSid = process.env.TWILIO_CONTENT_SID_DUCTLY_PING;
+  if (!contentSid) {
+    return NextResponse.json(
+      {
+        error:
+          "Ping template not configured. Create the ductly_ping template in Twilio Content Builder and set TWILIO_CONTENT_SID_DUCTLY_PING.",
+      },
+      { status: 503 }
+    );
+  }
+
   const { data: team, error: teamError } = await supabaseAdmin
     .from("teams")
     .select("id, name, whatsapp_number")
@@ -60,15 +70,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Twilio expects E.164 (+9715...) — strip everything except digits and +
-  const to = team.whatsapp_number.replace(/[^0-9+]/g, "");
+  const to = `whatsapp:${team.whatsapp_number.replace(/[^0-9+]/g, "")}`;
 
   const params = new URLSearchParams();
   params.set("From", fromNumber);
   params.set("To", to);
+  params.set("ContentSid", contentSid);
   params.set(
-    "Body",
-    `Ductly dispatch test ping for ${team.name}. If you received this, your number is reachable.`
+    "ContentVariables",
+    JSON.stringify({ "1": team.name })
   );
 
   const twilioRes = await fetch(

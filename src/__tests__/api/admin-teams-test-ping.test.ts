@@ -37,11 +37,19 @@ function mockTeamLookup(team: { id: string; name: string; whatsapp_number: strin
 }
 
 describe("POST /api/admin/teams/test-ping", () => {
+  function setTwilioEnv() {
+    process.env.TWILIO_ACCOUNT_SID = "ACxxx";
+    process.env.TWILIO_AUTH_TOKEN = "tok";
+    process.env.TWILIO_WHATSAPP_FROM = "+15551234567";
+    process.env.TWILIO_CONTENT_SID_DUCTLY_PING = "HXdu";
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.TWILIO_ACCOUNT_SID;
     delete process.env.TWILIO_AUTH_TOKEN;
     delete process.env.TWILIO_WHATSAPP_FROM;
+    delete process.env.TWILIO_CONTENT_SID_DUCTLY_PING;
   });
 
   it("returns 400 when team_id is missing", async () => {
@@ -61,7 +69,7 @@ describe("POST /api/admin/teams/test-ping", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 503 when Twilio is not configured", async () => {
+  it("returns 503 when Twilio creds are not configured", async () => {
     const { POST } = await import("@/app/api/admin/teams/test-ping/route");
     const res = await POST(makeRequest({ team_id: "t1" }));
     expect(res.status).toBe(503);
@@ -69,10 +77,21 @@ describe("POST /api/admin/teams/test-ping", () => {
     expect(data.error).toMatch(/Twilio not configured/);
   });
 
-  it("returns 404 when team does not exist", async () => {
+  it("returns 503 when ping content SID is not set", async () => {
     process.env.TWILIO_ACCOUNT_SID = "ACxxx";
     process.env.TWILIO_AUTH_TOKEN = "tok";
     process.env.TWILIO_WHATSAPP_FROM = "+15551234567";
+    // TWILIO_CONTENT_SID_DUCTLY_PING intentionally left unset
+
+    const { POST } = await import("@/app/api/admin/teams/test-ping/route");
+    const res = await POST(makeRequest({ team_id: "t1" }));
+    expect(res.status).toBe(503);
+    const data = await res.json();
+    expect(data.error).toMatch(/Ping template not configured/);
+  });
+
+  it("returns 404 when team does not exist", async () => {
+    setTwilioEnv();
     mockTeamLookup(null);
 
     const { POST } = await import("@/app/api/admin/teams/test-ping/route");
@@ -81,9 +100,7 @@ describe("POST /api/admin/teams/test-ping", () => {
   });
 
   it("returns 400 when team has no phone number", async () => {
-    process.env.TWILIO_ACCOUNT_SID = "ACxxx";
-    process.env.TWILIO_AUTH_TOKEN = "tok";
-    process.env.TWILIO_WHATSAPP_FROM = "+15551234567";
+    setTwilioEnv();
     mockTeamLookup({ id: "t1", name: "Alpha", whatsapp_number: "" });
 
     const { POST } = await import("@/app/api/admin/teams/test-ping/route");
@@ -94,9 +111,7 @@ describe("POST /api/admin/teams/test-ping", () => {
   });
 
   it("forwards Twilio failures with detail", async () => {
-    process.env.TWILIO_ACCOUNT_SID = "ACxxx";
-    process.env.TWILIO_AUTH_TOKEN = "tok";
-    process.env.TWILIO_WHATSAPP_FROM = "+15551234567";
+    setTwilioEnv();
     mockTeamLookup({ id: "t1", name: "Alpha", whatsapp_number: "+971501234567" });
 
     const mockFetch = vi.fn().mockResolvedValue({
@@ -115,9 +130,7 @@ describe("POST /api/admin/teams/test-ping", () => {
   });
 
   it("returns success when Twilio accepts the send", async () => {
-    process.env.TWILIO_ACCOUNT_SID = "ACxxx";
-    process.env.TWILIO_AUTH_TOKEN = "tok";
-    process.env.TWILIO_WHATSAPP_FROM = "+15551234567";
+    setTwilioEnv();
     mockTeamLookup({ id: "t1", name: "Alpha", whatsapp_number: "+971501234567" });
 
     const mockFetch = vi.fn().mockResolvedValue({
@@ -133,6 +146,6 @@ describe("POST /api/admin/teams/test-ping", () => {
     const data = await res.json();
     expect(data.success).toBe(true);
     expect(data.sid).toBe("SMxxx");
-    expect(data.to).toBe("+971501234567");
+    expect(data.to).toBe("whatsapp:+971501234567");
   });
 });
