@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
+import { sendWhatsAppTemplate, whatsappConfigured } from "@/lib/twilio-whatsapp";
 
 /**
  * POST /api/admin/teams/test-ping
  * Body: { team_id: string }
  *
- * Sends a WhatsApp template message to the team's number so admin can
- * verify the number is reachable before a real dispatch goes out.
- * Uses the ductly_ping WhatsApp template (Content API) — the template
- * must be created and Meta-approved in Twilio Content Builder first.
+ * Sends the `ductly_ping` WhatsApp template to the team's number so
+ * admin can verify it's reachable on the SAME channel a real dispatch
+ * uses. SMS is not an option here: the Twilio sender is a WhatsApp-only
+ * number (not SMS-capable), so an SMS From is rejected as "not a Twilio
+ * phone number". Business-initiated WhatsApp needs an approved template,
+ * hence the dedicated ductly_ping utility template (variable 1 = team
+ * name), configured via TWILIO_CONTENT_SID_DUCTLY_PING.
  */
 export async function POST(request: NextRequest) {
   const csrfError = requireSameOrigin(request);
@@ -28,10 +32,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "team_id is required." }, { status: 400 });
   }
 
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
-  if (!sid || !token || !fromNumber) {
+  if (!whatsappConfigured()) {
     return NextResponse.json(
       {
         error:
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Ping template not configured. Create the ductly_ping template in Twilio Content Builder and set TWILIO_CONTENT_SID_DUCTLY_PING.",
+          "Ping template not configured. Create the ductly_ping template (scripts/twilio) and set TWILIO_CONTENT_SID_DUCTLY_PING.",
       },
       { status: 503 }
     );
@@ -70,38 +71,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const to = `whatsapp:${team.whatsapp_number.replace(/[^0-9+]/g, "")}`;
+  // E.164 for the response; sendWhatsAppTemplate wraps both From and To
+  // as whatsapp:<number> so the channels match.
+  const to = team.whatsapp_number.replace(/[^0-9+]/g, "");
+  const result = await sendWhatsAppTemplate(to, contentSid, { "1": team.name });
 
-  const params = new URLSearchParams();
-  params.set("From", fromNumber);
-  params.set("To", to);
-  params.set("ContentSid", contentSid);
-  params.set(
-    "ContentVariables",
-    JSON.stringify({ "1": team.name })
-  );
-
-  const twilioRes = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    }
-  );
-
-  const twilioJson = await twilioRes.json().catch(() => ({}));
-
-  if (!twilioRes.ok) {
+  if (!result.ok) {
     return NextResponse.json(
       {
         error: "Twilio rejected the send.",
-        twilio_status: twilioRes.status,
-        twilio_message: twilioJson.message ?? null,
-        twilio_code: twilioJson.code ?? null,
+        twilio_status: result.status ?? null,
+        twilio_message: result.errorMessage ?? null,
+        twilio_code: result.errorCode ?? null,
       },
       { status: 502 }
     );
@@ -110,7 +91,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     to,
-    sid: twilioJson.sid,
-    status: twilioJson.status,
+    sid: result.sid,
+    status: result.status,
   });
 }
