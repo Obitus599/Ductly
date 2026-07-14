@@ -1,0 +1,109 @@
+{
+  "name": "Ductly — Job Status Prompt (Send to Team)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "minutes", "minutesInterval": 15 } ] }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT b.id AS booking_id, b.slot_start, b.slot_end, b.address, c.name AS customer_name, t.name AS team_name, t.whatsapp_number AS team_whatsapp, t.id AS team_id FROM bookings b JOIN customers c ON c.id = b.customer_id JOIN teams t ON t.id = b.team_id LEFT JOIN job_status_prompts j ON j.booking_id = b.id WHERE b.status = 'confirmed' AND b.team_id IS NOT NULL AND b.slot_start < NOW() - INTERVAL '45 minutes' AND b.slot_start > NOW() - INTERVAL '75 minutes' AND j.id IS NULL ORDER BY b.slot_start ASC;",
+        "options": {}
+      },
+      "id": "query-eligible",
+      "name": "Query Eligible Bookings (45-75 min ago)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Supabase Postgres — configure in n8n credentials" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "has-wa", "leftValue": "={{ $json.team_whatsapp }}", "rightValue": "", "operator": { "type": "string", "operation": "isNotEmpty" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-team-wa",
+      "name": "Team has WhatsApp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ $env.TWILIO_ACCOUNT_SID }}/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "={{ $env.TWILIO_WHATSAPP_FROM }}" },
+            { "name": "To", "value": "=whatsapp:{{ $json.team_whatsapp.replace(/[^0-9+]/g, '') }}" },
+            { "name": "ContentSid", "value": "={{ $env.TWILIO_CONTENT_SID_DUCTLY_JOB_STATUS }}" },
+            { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.customer_name,\n  '2': $json.slot_start,\n  '3': $json.address\n}) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "whatsapp-job-status",
+      "name": "WhatsApp: Job Status Prompt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200],
+      "credentials": { "httpBasicAuth": { "id": "CONFIGURE_ME", "name": "Twilio Basic Auth (Account SID / Auth Token)" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO job_status_prompts (booking_id, team_id, team_whatsapp, status) VALUES ('{{ $json.booking_id }}', '{{ $json.team_id }}', '{{ $json.team_whatsapp }}', 'pending');",
+        "options": {}
+      },
+      "id": "mark-prompt-sent",
+      "name": "Mark Prompt Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@ductly.ae",
+        "toEmail": "admin@ductly.ae",
+        "subject": "Job Status Prompt Sent — {{ $json.customer_name }} — {{ $json.booking_id.substring(0, 8) }}",
+        "emailType": "html",
+        "html": "=<p>Job status prompt sent to <strong>{{ $json.team_name }}</strong> for booking <strong>{{ $json.booking_id.substring(0, 8) }}</strong>.</p><ul><li><strong>Customer:</strong> {{ $json.customer_name }}</li><li><strong>When:</strong> {{ $json.slot_start }}</li><li><strong>Where:</strong> {{ $json.address }}</li></ul><p>Waiting for team to reply Completed / Not Completed.</p>",
+        "options": {}
+      },
+      "id": "email-admin-log",
+      "name": "Email: Admin Log",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [660, 500],
+      "credentials": { "smtp": { "id": "CONFIGURE_ME", "name": "SMTP" } }
+    },
+    { "parameters": {}, "id": "no-op-wa", "name": "Skip (No WhatsApp)", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [900, 340] }
+  ],
+  "connections": {
+    "Every 15 Minutes": { "main": [ [ { "node": "Query Eligible Bookings (45-75 min ago)", "type": "main", "index": 0 } ] ] },
+    "Query Eligible Bookings (45-75 min ago)": { "main": [ [ { "node": "Team has WhatsApp?", "type": "main", "index": 0 }, { "node": "Email: Admin Log", "type": "main", "index": 0 } ] ] },
+    "Team has WhatsApp?": { "main": [ [ { "node": "WhatsApp: Job Status Prompt", "type": "main", "index": 0 }, { "node": "Mark Prompt Sent", "type": "main", "index": 0 } ], [ { "node": "Skip (No WhatsApp)", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [ { "name": "ductly" }, { "name": "job-status" }, { "name": "scheduled" } ],
+  "pinData": {},
+  "versionId": "1"
+}

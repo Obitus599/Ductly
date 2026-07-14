@@ -1,0 +1,130 @@
+{
+  "name": "Ductly — Ops Alerts (Owner Notifications)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ops-alert",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Ops Alert",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "ops-alert"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "has-phone-1", "leftValue": "={{ $env.ALERT_PHONE_1 }}", "rightValue": "", "operator": { "type": "string", "operation": "isNotEmpty" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-phone-1",
+      "name": "Owner 1 configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "has-phone-2", "leftValue": "={{ $env.ALERT_PHONE_2 }}", "rightValue": "", "operator": { "type": "string", "operation": "isNotEmpty" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-phone-2",
+      "name": "Owner 2 configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ $env.TWILIO_ACCOUNT_SID }}/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "={{ $env.TWILIO_WHATSAPP_FROM }}" },
+            { "name": "To", "value": "=whatsapp:{{ $env.ALERT_PHONE_1.replace(/[^0-9+]/g, '') }}" },
+            { "name": "ContentSid", "value": "={{ $env.TWILIO_CONTENT_SID_DUCTLY_OPS_ALERT }}" },
+            { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.alert_label || 'Alert',\n  '2': $json.customer_name || 'N/A',\n  '3': $json.when_human || $json.slot_start || 'N/A',\n  '4': $json.address || 'N/A',\n  '5': $json.team_name || 'N/A',\n  '6': ($json.extra || '') + ($json.booking_id ? ' · ' + $json.booking_id.substring(0, 8) : '')\n}) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "whatsapp-owner-1",
+      "name": "WhatsApp: Owner 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 120],
+      "credentials": { "httpBasicAuth": { "id": "CONFIGURE_ME", "name": "Twilio Basic Auth (Account SID / Auth Token)" } }
+    },
+    {
+      "parameters": {
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ $env.TWILIO_ACCOUNT_SID }}/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "={{ $env.TWILIO_WHATSAPP_FROM }}" },
+            { "name": "To", "value": "=whatsapp:{{ $env.ALERT_PHONE_2.replace(/[^0-9+]/g, '') }}" },
+            { "name": "ContentSid", "value": "={{ $env.TWILIO_CONTENT_SID_DUCTLY_OPS_ALERT }}" },
+            { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.alert_label || 'Alert',\n  '2': $json.customer_name || 'N/A',\n  '3': $json.when_human || $json.slot_start || 'N/A',\n  '4': $json.address || 'N/A',\n  '5': $json.team_name || 'N/A',\n  '6': ($json.extra || '') + ($json.booking_id ? ' · ' + $json.booking_id.substring(0, 8) : '')\n}) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "whatsapp-owner-2",
+      "name": "WhatsApp: Owner 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 340],
+      "credentials": { "httpBasicAuth": { "id": "CONFIGURE_ME", "name": "Twilio Basic Auth (Account SID / Auth Token)" } }
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@ductly.ae",
+        "toEmail": "={{ $env.ALERT_EMAIL || 'admin@ductly.ae' }}",
+        "subject": "={{ $json.alert_label || 'Alert' }} — {{ $json.booking_id ? $json.booking_id.substring(0, 8) : '' }}",
+        "emailType": "html",
+        "html": "=<p><strong>{{ $json.alert_label || 'Alert' }}</strong></p><ul><li><strong>Customer:</strong> {{ $json.customer_name || 'N/A' }} ({{ $json.customer_phone || 'N/A' }})</li><li><strong>When:</strong> {{ $json.when_human || $json.slot_start || 'N/A' }}</li><li><strong>Where:</strong> {{ $json.address || 'N/A' }}</li><li><strong>Team:</strong> {{ $json.team_name || 'N/A' }}</li><li><strong>Booking:</strong> {{ $json.booking_id || 'N/A' }}</li><li><strong>Source:</strong> {{ $json.source || 'N/A' }}</li></ul><p>{{ $json.extra || '' }}</p>",
+        "options": {}
+      },
+      "id": "email-admin-log",
+      "name": "Email: Admin Log",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [660, 540],
+      "credentials": { "smtp": { "id": "CONFIGURE_ME", "name": "SMTP — configure in n8n credentials" } }
+    },
+    { "parameters": {}, "id": "no-op-1", "name": "Skip Owner 1", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [660, 200] },
+    { "parameters": {}, "id": "no-op-2", "name": "Skip Owner 2", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [660, 440] }
+  ],
+  "connections": {
+    "Webhook: Ops Alert": { "main": [ [ { "node": "Owner 1 configured?", "type": "main", "index": 0 }, { "node": "Owner 2 configured?", "type": "main", "index": 0 }, { "node": "Email: Admin Log", "type": "main", "index": 0 } ] ] },
+    "Owner 1 configured?": { "main": [ [ { "node": "WhatsApp: Owner 1", "type": "main", "index": 0 } ], [ { "node": "Skip Owner 1", "type": "main", "index": 0 } ] ] },
+    "Owner 2 configured?": { "main": [ [ { "node": "WhatsApp: Owner 2", "type": "main", "index": 0 } ], [ { "node": "Skip Owner 2", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [ { "name": "ductly" }, { "name": "ops" }, { "name": "alert" } ],
+  "pinData": {},
+  "versionId": "1"
+}
