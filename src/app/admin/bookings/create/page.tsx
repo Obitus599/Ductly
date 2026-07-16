@@ -14,11 +14,7 @@ const INPUT =
 
 const LABEL = "block text-[13px] font-medium text-[rgb(80,85,95)] mb-1.5";
 
-const PLAN_OPTIONS = [
-  { key: "essential", label: "Essential", rate: 349, setupMins: 45, perThermostatMins: 45 },
-  { key: "signature", label: "Signature", rate: 549, setupMins: 80, perThermostatMins: 45 },
-  { key: "elite",     label: "Elite",     rate: 649, setupMins: 80, perThermostatMins: 60 },
-];
+import { PLAN_OPTIONS } from "@/lib/pricing";
 
 interface SlotResponse {
   slots: string[];

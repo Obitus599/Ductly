@@ -9,13 +9,21 @@ import { buildMapsLink, formatSlotForDispatch, addressQuality } from "@/lib/disp
 import { vatFromNet } from "@/lib/vat";
 import { UAE_TZ_SUFFIX } from "@/lib/slot-helpers";
 import { ADMIN_RECORDED_CONSENT_VERSION } from "@/lib/consent";
+import { PLANS, calcJobDuration } from "@/lib/pricing";
 
-/** Plan config — must match shared.tsx / checkout PLAN_CONFIG */
-const PLAN_CONFIG: Record<string, { rate: number; setupMins: number; perThermostatMins: number }> = {
-  essential: { rate: 349, setupMins: 45, perThermostatMins: 45 },
-  signature: { rate: 549, setupMins: 80, perThermostatMins: 45 },
-  elite:     { rate: 649, setupMins: 80, perThermostatMins: 60 },
-};
+const PLAN_CONFIG = PLANS;
+
+interface CreateBookingBody {
+  customer_name: string;
+  customer_email?: string;
+  customer_phone: string;
+  address: string;
+  address_details?: Record<string, unknown>;
+  slot_start: string;
+  plan: string;
+  thermostats?: number;
+  notes?: string;
+}
 
 /**
  * POST /api/admin/bookings/create
@@ -30,8 +38,7 @@ export async function POST(request: NextRequest) {
   const authError = await requireAdmin(request);
   if (authError) return authError;
 
-  // eslint-disable-next-line
-  let body: any;
+  let body: CreateBookingBody;
   try {
     body = await request.json();
   } catch {
@@ -313,7 +320,8 @@ export async function POST(request: NextRequest) {
       slot_end_human: formatSlotForDispatch(computedSlotEnd),
       plan,
       price_aed: String(priceAed),
-      source: "manual_admin_booking",
+      twilio_from: process.env.TWILIO_WHATSAPP_FROM || "",
+      content_sid: process.env.TWILIO_CONTENT_SID_TEAM_DISPATCH || "",
     });
   }
 

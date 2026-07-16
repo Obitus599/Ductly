@@ -1,5 +1,5 @@
 {
-  "name": "Ductly — Verify Email (OTP)",
+  "name": "Ductly - Verify Email (OTP)",
   "nodes": [
     {
       "parameters": {
@@ -13,7 +13,10 @@
       "name": "Webhook: Verify Email",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [220, 300],
+      "position": [
+        220,
+        300
+      ],
       "webhookId": "verify-email"
     },
     {
@@ -29,11 +32,14 @@
       "name": "Send Verification Email",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [460, 300],
+      "position": [
+        460,
+        300
+      ],
       "credentials": {
         "smtp": {
-          "id": "CONFIGURE_ME",
-          "name": "SMTP — reuse the same credential as Booking Confirmed"
+          "id": "woEEVaaZgFFtA1gv",
+          "name": "Resend SMTP"
         }
       }
     }
@@ -41,18 +47,17 @@
   "connections": {
     "Webhook: Verify Email": {
       "main": [
-        [{ "node": "Send Verification Email", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Send Verification Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": [
-    { "name": "ductly" },
-    { "name": "verification" }
-  ],
-  "pinData": {},
-  "versionId": "1"
+  }
 }

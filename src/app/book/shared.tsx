@@ -2,6 +2,8 @@
 
 export type Step = "details" | "calendar" | "checkout";
 
+import { PLANS as _plans, type PlanConfig as _PlanConfig } from "@/lib/pricing";
+
 export interface PlanConfig {
   name: string;
   rate: number;
@@ -9,11 +11,15 @@ export interface PlanConfig {
   perThermostatMins: number;
 }
 
-export const PLANS: Record<string, PlanConfig> = {
-  essential: { name: "Essential", rate: 349, setupMins: 45, perThermostatMins: 45 },
-  signature: { name: "Signature", rate: 549, setupMins: 80, perThermostatMins: 45 },
-  elite:     { name: "Elite",     rate: 649, setupMins: 80, perThermostatMins: 60 },
-};
+export const PLANS: Record<string, PlanConfig> = {};
+for (const [key, cfg] of Object.entries(_plans)) {
+  PLANS[key] = {
+    name: cfg.label,
+    rate: cfg.rate,
+    setupMins: cfg.setupMins,
+    perThermostatMins: cfg.perThermostatMins,
+  };
+}
 
 /** Calculate total job duration in minutes for a given plan and thermostat count. */
 export function calcJobDuration(plan: PlanConfig, thermostats: number): number {

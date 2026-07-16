@@ -267,6 +267,8 @@ export async function POST(request: NextRequest) {
             slot_end_human: slotEndHuman,
             plan: metadata.plan || "",
             price_aed: metadata.price_aed || "",
+            twilio_from: process.env.TWILIO_WHATSAPP_FROM || "",
+            content_sid: process.env.TWILIO_CONTENT_SID_TEAM_DISPATCH || "",
           });
         }
       } catch (agentError) {
@@ -364,6 +366,8 @@ export async function POST(request: NextRequest) {
           price_aed: metadata.price_aed || "",
           manage_token: manageToken,
           payment_intent_id: session.payment_intent,
+          twilio_from: process.env.TWILIO_WHATSAPP_FROM || "",
+          content_sid: process.env.TWILIO_CONTENT_SID_BOOKING_CONFIRMED || "",
         });
       }
 

@@ -5,7 +5,10 @@
       "parameters": {
         "rule": {
           "interval": [
-            { "field": "minutes", "minutesInterval": 30 }
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
           ]
         }
       },
@@ -13,7 +16,10 @@
       "name": "Every 30 Minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
@@ -25,30 +31,43 @@
       "name": "Query Upcoming Bookings",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [440, 300],
+      "position": [
+        440,
+        300
+      ],
       "credentials": {
         "postgres": {
-          "id": "CONFIGURE_ME",
-          "name": "Supabase Postgres — configure in n8n credentials"
+          "id": "KEEnB64Vep0U1RKJ",
+          "name": "Supabase (ductly)"
         }
       }
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "is-24h",
               "leftValue": "={{ $json.hours_until }}",
               "rightValue": 25,
-              "operator": { "type": "number", "operation": "lte" }
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
             },
             {
               "id": "is-24h-min",
               "leftValue": "={{ $json.hours_until }}",
               "rightValue": 23,
-              "operator": { "type": "number", "operation": "gte" }
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
             }
           ],
           "combinator": "and"
@@ -59,24 +78,37 @@
       "name": "24h Window?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 200]
+      "position": [
+        660,
+        200
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "is-1h",
               "leftValue": "={{ $json.hours_until }}",
               "rightValue": 1.5,
-              "operator": { "type": "number", "operation": "lte" }
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
             },
             {
               "id": "is-1h-min",
               "leftValue": "={{ $json.hours_until }}",
               "rightValue": 0.5,
-              "operator": { "type": "number", "operation": "gte" }
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
             }
           ],
           "combinator": "and"
@@ -87,7 +119,10 @@
       "name": "1h Window?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 440]
+      "position": [
+        660,
+        440
+      ]
     },
     {
       "parameters": {
@@ -98,10 +133,22 @@
         "contentType": "form-urlencoded",
         "bodyParameters": {
           "parameters": [
-            { "name": "From", "value": "={{ $env.TWILIO_WHATSAPP_FROM }}" },
-            { "name": "To", "value": "=whatsapp:{{ $json.customer_phone.replace(/[^0-9+]/g, '') }}" },
-            { "name": "ContentSid", "value": "={{ $env.TWILIO_CONTENT_SID_BOOKING_REMINDER_24H }}" },
-            { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.customer_name,\n  '2': $json.slot_start,\n  '3': $json.address,\n  '4': $json.team_name || 'Your assigned team'\n}) }}" }
+            {
+              "name": "From",
+              "value": "={{ $env.TWILIO_WHATSAPP_FROM }}"
+            },
+            {
+              "name": "To",
+              "value": "=whatsapp:{{ $json.customer_phone.replace(/[^0-9+]/g, '') }}"
+            },
+            {
+              "name": "ContentSid",
+              "value": "={{ $env.TWILIO_CONTENT_SID_BOOKING_REMINDER_24H }}"
+            },
+            {
+              "name": "ContentVariables",
+              "value": "={{ JSON.stringify({\n  '1': $json.customer_name,\n  '2': $json.slot_start,\n  '3': $json.address,\n  '4': $json.team_name || 'Your assigned team'\n}) }}"
+            }
           ]
         },
         "options": {}
@@ -110,10 +157,13 @@
       "name": "WhatsApp: 24h Reminder",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 120],
+      "position": [
+        900,
+        120
+      ],
       "credentials": {
         "httpBasicAuth": {
-          "id": "CONFIGURE_ME",
+          "id": "4RkcGDN9X6hNuKWv",
           "name": "Twilio Basic Auth (Account SID / Auth Token)"
         }
       }
@@ -131,11 +181,14 @@
       "name": "Email: 24h Reminder",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [900, 280],
+      "position": [
+        900,
+        280
+      ],
       "credentials": {
         "smtp": {
-          "id": "CONFIGURE_ME",
-          "name": "SMTP — configure in n8n credentials"
+          "id": "woEEVaaZgFFtA1gv",
+          "name": "Resend SMTP"
         }
       }
     },
@@ -148,10 +201,22 @@
         "contentType": "form-urlencoded",
         "bodyParameters": {
           "parameters": [
-            { "name": "From", "value": "={{ $env.TWILIO_WHATSAPP_FROM }}" },
-            { "name": "To", "value": "=whatsapp:{{ $json.customer_phone.replace(/[^0-9+]/g, '') }}" },
-            { "name": "ContentSid", "value": "={{ $env.TWILIO_CONTENT_SID_BOOKING_REMINDER_1H }}" },
-            { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.customer_name,\n  '2': $json.slot_start,\n  '3': $json.team_name || 'Your assigned team'\n}) }}" }
+            {
+              "name": "From",
+              "value": "={{ $env.TWILIO_WHATSAPP_FROM }}"
+            },
+            {
+              "name": "To",
+              "value": "=whatsapp:{{ $json.customer_phone.replace(/[^0-9+]/g, '') }}"
+            },
+            {
+              "name": "ContentSid",
+              "value": "={{ $env.TWILIO_CONTENT_SID_BOOKING_REMINDER_1H }}"
+            },
+            {
+              "name": "ContentVariables",
+              "value": "={{ JSON.stringify({\n  '1': $json.customer_name,\n  '2': $json.slot_start,\n  '3': $json.team_name || 'Your assigned team'\n}) }}"
+            }
           ]
         },
         "options": {}
@@ -160,10 +225,13 @@
       "name": "WhatsApp: 1h Reminder",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 400],
+      "position": [
+        900,
+        400
+      ],
       "credentials": {
         "httpBasicAuth": {
-          "id": "CONFIGURE_ME",
+          "id": "4RkcGDN9X6hNuKWv",
           "name": "Twilio Basic Auth (Account SID / Auth Token)"
         }
       }
@@ -178,11 +246,14 @@
       "name": "Mark 24h Sent",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1140, 200],
+      "position": [
+        1140,
+        200
+      ],
       "credentials": {
         "postgres": {
-          "id": "CONFIGURE_ME",
-          "name": "Supabase Postgres — configure in n8n credentials"
+          "id": "KEEnB64Vep0U1RKJ",
+          "name": "Supabase (ductly)"
         }
       }
     },
@@ -196,11 +267,14 @@
       "name": "Mark 1h Sent",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1140, 440],
+      "position": [
+        1140,
+        440
+      ],
       "credentials": {
         "postgres": {
-          "id": "CONFIGURE_ME",
-          "name": "Supabase Postgres — configure in n8n credentials"
+          "id": "KEEnB64Vep0U1RKJ",
+          "name": "Supabase (ductly)"
         }
       }
     },
@@ -210,7 +284,10 @@
       "name": "Skip 24h",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [900, 200]
+      "position": [
+        900,
+        200
+      ]
     },
     {
       "parameters": {},
@@ -218,50 +295,93 @@
       "name": "Skip 1h",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [900, 520]
+      "position": [
+        900,
+        520
+      ]
     }
   ],
   "connections": {
     "Every 30 Minutes": {
       "main": [
-        [{ "node": "Query Upcoming Bookings", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Query Upcoming Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Query Upcoming Bookings": {
       "main": [
         [
-          { "node": "24h Window?", "type": "main", "index": 0 },
-          { "node": "1h Window?", "type": "main", "index": 0 }
+          {
+            "node": "24h Window?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "1h Window?",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "24h Window?": {
       "main": [
         [
-          { "node": "WhatsApp: 24h Reminder", "type": "main", "index": 0 },
-          { "node": "Email: 24h Reminder", "type": "main", "index": 0 },
-          { "node": "Mark 24h Sent", "type": "main", "index": 0 }
+          {
+            "node": "WhatsApp: 24h Reminder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email: 24h Reminder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Mark 24h Sent",
+            "type": "main",
+            "index": 0
+          }
         ],
-        [{ "node": "Skip 24h", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Skip 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "1h Window?": {
       "main": [
         [
-          { "node": "WhatsApp: 1h Reminder", "type": "main", "index": 0 },
-          { "node": "Mark 1h Sent", "type": "main", "index": 0 }
+          {
+            "node": "WhatsApp: 1h Reminder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Mark 1h Sent",
+            "type": "main",
+            "index": 0
+          }
         ],
-        [{ "node": "Skip 1h", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Skip 1h",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
-  "settings": { "executionOrder": "v1" },
-  "staticData": null,
-  "tags": [
-    { "name": "ductly" },
-    { "name": "reminder" },
-    { "name": "scheduled" }
-  ],
-  "pinData": {},
-  "versionId": "1"
+  "settings": {
+    "executionOrder": "v1"
+  }
 }

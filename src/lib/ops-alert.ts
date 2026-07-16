@@ -64,6 +64,10 @@ export function fireOpsAlert(event: OpsAlertEvent, details: OpsAlertDetails): vo
     ? formatSlotForDispatch(details.slotStart)
     : "";
 
+  const ownerPhone = process.env.OWNER_WHATSAPP || "";
+  const twilioFrom = process.env.TWILIO_WHATSAPP_FROM || "";
+  const contentSid = process.env.TWILIO_CONTENT_SID_DUCTLY_OPS_ALERT || "";
+
   fireN8nWebhook("ops_alert", url, {
     event: "ops_alert",
     alert_type: event,
@@ -77,5 +81,8 @@ export function fireOpsAlert(event: OpsAlertEvent, details: OpsAlertDetails): vo
     team_name: details.teamName || "",
     extra: details.extra || "",
     source: details.source || "",
+    owner_phone: ownerPhone,
+    twilio_from: twilioFrom,
+    content_sid: contentSid,
   });
 }

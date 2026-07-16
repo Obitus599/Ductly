@@ -464,19 +464,21 @@ const PRICING_BTN_STYLE: React.CSSProperties = {
   letterSpacing: "-0.02em",
 };
 
+import { PLANS } from "@/lib/pricing";
+
 const plans = [
   {
-    name: "Essential", price: "349", tagline: "Basic duct vacuuming. Perfect for light maintenance.",
+    name: PLANS.essential.label, price: String(PLANS.essential.rate), tagline: PLANS.essential.tagline,
     cta: "Select Essential", best: false,
     features: ["TurboClean\u2122", "Fan coil unit cleaning", "HEPA vacuuming", "Filter cleaning"],
   },
   {
-    name: "Signature", price: "549", tagline: "Full medical-grade sanitizations and restoration.",
+    name: PLANS.signature.label, price: String(PLANS.signature.rate), tagline: PLANS.signature.tagline,
     cta: "Select Signature", best: true,
     features: ["TurboClean\u2122", "Filter cleaning", "Fan coil unit cleaning", "Fumigation", "Bio-enzyme disinfection", "Mold remediation treatment", "Black mold remediation"],
   },
   {
-    name: "Elite", price: "649", tagline: "Ultimate protection with 12-month air purity guarantee.",
+    name: PLANS.elite.label, price: String(PLANS.elite.rate), tagline: PLANS.elite.tagline,
     cta: "Select Elite", best: false,
     features: ["TurboClean\u2122", "Filter cleaning", "Fan coil unit cleaning", "Fumigation", "Bio-enzyme disinfection", "Mold remediation treatment", "Black mold remediation", "AC unit coil deep clean", "Air quality analysis"],
   },
@@ -775,7 +777,7 @@ function StatsSection() {
 /* ─── FAQ ─────────────────────────────────────────────────────────────────── */
 
 const faqs = [
-  { q: "How much does your cleaning service cost?", a: "Our pricing starts at 349 AED per thermostat for the Essential plan. We offer three tiers - Essential, Signature, and Elite - to match your needs and budget. Contact us for a personalized quote." },
+  { q: "How much does your cleaning service cost?", a: `Our pricing starts at ${PLANS.essential.rate} AED per thermostat for the Essential plan. We offer three tiers — Essential, Signature, and Elite — to match your needs and budget. Contact us for a personalized quote.` },
   { q: "Do you offer a free cleaning services estimate?", a: "Yes, we provide free estimates for all residential and commercial properties. Our team will assess your HVAC system and provide a detailed quote with no obligation." },
   { q: "How long will Ac duct cleaning take?", a: "A typical residential cleaning takes 90 minutes. Larger properties or commercial spaces may take 2-4 hours depending on the number of units and complexity of the ductwork." },
   { q: "Can duct cleaning reduce electricity bills?", a: "Absolutely. A clean HVAC system operates more efficiently, which can reduce your energy consumption by 15-25%. Most customers notice a difference in their first bill after cleaning." },

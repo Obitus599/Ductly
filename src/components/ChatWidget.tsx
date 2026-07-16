@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 
-const HELPLINE = "+971 54 161 0793";
-const HELPLINE_EMAIL = "info@ductly.ae";
+const HELPLINE = process.env.NEXT_PUBLIC_HELPLINE_PHONE || "+971 54 161 0793";
+const HELPLINE_EMAIL = process.env.NEXT_PUBLIC_HELPLINE_EMAIL || "info@ductly.ae";
 const MAX_MESSAGES = 10;
 const MAX_INPUT_LENGTH = 500;
 

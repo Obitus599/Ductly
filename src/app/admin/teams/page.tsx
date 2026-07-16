@@ -204,7 +204,7 @@ export default function TeamsPage() {
                 style={{ fontFamily: "var(--font-body)" }}
                 value={newWhatsapp}
                 onChange={(e) => setNewWhatsapp(e.target.value)}
-                placeholder="+917042009519"
+                placeholder="+971 50 000 0000"
               />
             </div>
           </div>

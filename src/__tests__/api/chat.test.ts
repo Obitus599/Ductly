@@ -33,6 +33,8 @@ describe("POST /api/chat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    process.env.HELPLINE_PHONE = "+971 54 161 0793";
+    process.env.HELPLINE_EMAIL = "info@ductly.ae";
   });
 
   afterEach(() => {
@@ -41,6 +43,8 @@ describe("POST /api/chat", () => {
     } else {
       process.env.OPENROUTER_API_KEY = ORIGINAL_KEY;
     }
+    delete process.env.HELPLINE_PHONE;
+    delete process.env.HELPLINE_EMAIL;
   });
 
   function setupOpenRouterReply(content: string) {

@@ -5,7 +5,10 @@
       "parameters": {
         "rule": {
           "interval": [
-            { "field": "hours", "hoursInterval": 1 }
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
           ]
         }
       },
@@ -13,7 +16,10 @@
       "name": "Every Hour",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
@@ -25,24 +31,34 @@
       "name": "Query Recent No-Shows",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [440, 300],
+      "position": [
+        440,
+        300
+      ],
       "credentials": {
         "postgres": {
-          "id": "CONFIGURE_ME",
-          "name": "Supabase Postgres — configure in n8n credentials"
+          "id": "KEEnB64Vep0U1RKJ",
+          "name": "Supabase (ductly)"
         }
       }
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "has-phone",
               "leftValue": "={{ $json.customer_phone }}",
               "rightValue": "",
-              "operator": { "type": "string", "operation": "isNotEmpty" }
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
             }
           ],
           "combinator": "and"
@@ -53,18 +69,28 @@
       "name": "Has Phone?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 200]
+      "position": [
+        660,
+        200
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "has-email",
               "leftValue": "={{ $json.customer_email }}",
               "rightValue": "",
-              "operator": { "type": "string", "operation": "isNotEmpty" }
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
             }
           ],
           "combinator": "and"
@@ -75,7 +101,10 @@
       "name": "Has Email?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 440]
+      "position": [
+        660,
+        440
+      ]
     },
     {
       "parameters": {
@@ -86,10 +115,22 @@
         "contentType": "form-urlencoded",
         "bodyParameters": {
           "parameters": [
-            { "name": "From", "value": "={{ $env.TWILIO_WHATSAPP_FROM }}" },
-            { "name": "To", "value": "=whatsapp:{{ $json.customer_phone.replace(/[^0-9+]/g, '') }}" },
-            { "name": "ContentSid", "value": "={{ $env.TWILIO_CONTENT_SID_NO_SHOW_FOLLOWUP }}" },
-            { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.customer_name,\n  '2': $json.slot_start\n}) }}" }
+            {
+              "name": "From",
+              "value": "={{ $env.TWILIO_WHATSAPP_FROM }}"
+            },
+            {
+              "name": "To",
+              "value": "=whatsapp:{{ $json.customer_phone.replace(/[^0-9+]/g, '') }}"
+            },
+            {
+              "name": "ContentSid",
+              "value": "={{ $env.TWILIO_CONTENT_SID_NO_SHOW_FOLLOWUP }}"
+            },
+            {
+              "name": "ContentVariables",
+              "value": "={{ JSON.stringify({\n  '1': $json.customer_name,\n  '2': $json.slot_start\n}) }}"
+            }
           ]
         },
         "options": {}
@@ -98,10 +139,13 @@
       "name": "WhatsApp: No-Show Follow-Up",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 120],
+      "position": [
+        900,
+        120
+      ],
       "credentials": {
         "httpBasicAuth": {
-          "id": "CONFIGURE_ME",
+          "id": "4RkcGDN9X6hNuKWv",
           "name": "Twilio Basic Auth (Account SID / Auth Token)"
         }
       }
@@ -119,11 +163,14 @@
       "name": "Email: No-Show Follow-Up",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [900, 400],
+      "position": [
+        900,
+        400
+      ],
       "credentials": {
         "smtp": {
-          "id": "CONFIGURE_ME",
-          "name": "SMTP — configure in n8n credentials"
+          "id": "woEEVaaZgFFtA1gv",
+          "name": "Resend SMTP"
         }
       }
     },
@@ -140,11 +187,14 @@
       "name": "Email: Admin No-Show Alert",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [660, 600],
+      "position": [
+        660,
+        600
+      ],
       "credentials": {
         "smtp": {
-          "id": "CONFIGURE_ME",
-          "name": "SMTP — configure in n8n credentials"
+          "id": "woEEVaaZgFFtA1gv",
+          "name": "Resend SMTP"
         }
       }
     },
@@ -158,11 +208,14 @@
       "name": "Mark No-Show Notified",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [440, 600],
+      "position": [
+        440,
+        600
+      ],
       "credentials": {
         "postgres": {
-          "id": "CONFIGURE_ME",
-          "name": "Supabase Postgres — configure in n8n credentials"
+          "id": "KEEnB64Vep0U1RKJ",
+          "name": "Supabase (ductly)"
         }
       }
     },
@@ -172,7 +225,10 @@
       "name": "Skip WhatsApp",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [900, 240]
+      "position": [
+        900,
+        240
+      ]
     },
     {
       "parameters": {},
@@ -180,45 +236,88 @@
       "name": "Skip Email",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [900, 540]
+      "position": [
+        900,
+        540
+      ]
     }
   ],
   "connections": {
     "Every Hour": {
       "main": [
-        [{ "node": "Query Recent No-Shows", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Query Recent No-Shows",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Query Recent No-Shows": {
       "main": [
         [
-          { "node": "Has Phone?", "type": "main", "index": 0 },
-          { "node": "Has Email?", "type": "main", "index": 0 },
-          { "node": "Email: Admin No-Show Alert", "type": "main", "index": 0 },
-          { "node": "Mark No-Show Notified", "type": "main", "index": 0 }
+          {
+            "node": "Has Phone?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Email?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email: Admin No-Show Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Mark No-Show Notified",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Has Phone?": {
       "main": [
-        [{ "node": "WhatsApp: No-Show Follow-Up", "type": "main", "index": 0 }],
-        [{ "node": "Skip WhatsApp", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "WhatsApp: No-Show Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Has Email?": {
       "main": [
-        [{ "node": "Email: No-Show Follow-Up", "type": "main", "index": 0 }],
-        [{ "node": "Skip Email", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Email: No-Show Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
-  "settings": { "executionOrder": "v1" },
-  "staticData": null,
-  "tags": [
-    { "name": "ductly" },
-    { "name": "no-show" },
-    { "name": "scheduled" }
-  ],
-  "pinData": {},
-  "versionId": "1"
+  "settings": {
+    "executionOrder": "v1"
+  }
 }

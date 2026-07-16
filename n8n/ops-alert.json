@@ -25,9 +25,9 @@
         "contentType": "form-urlencoded",
         "bodyParameters": {
           "parameters": [
-            { "name": "From", "value": "=whatsapp:+15559870195" },
-            { "name": "To", "value": "=whatsapp:+917042009519" },
-            { "name": "ContentSid", "value": "=HXb620c5bda6c771bfeb872d384e3cae66" },
+            { "name": "From", "value": "={{ $json.body.twilio_from || 'whatsapp:+15559870195' }}" },
+            { "name": "To", "value": "={{ 'whatsapp:' + ($json.body.owner_phone || '917042009519').replace(/[^0-9+]/g, '') }}" },
+            { "name": "ContentSid", "value": "={{ $json.body.content_sid || 'HX3d8c4a4e06a7aa812209e1e64b64055a' }}" },
             { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.body.alert_label || 'Alert',\n  '2': $json.body.customer_name || '',\n  '3': $json.body.when_human || $json.body.slot_start || '',\n  '4': $json.body.address || '',\n  '5': $json.body.team_name || '',\n  '6': $json.body.extra || ''\n}) }}" }
           ]
         },

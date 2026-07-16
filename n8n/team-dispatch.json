@@ -25,10 +25,10 @@
         "contentType": "form-urlencoded",
         "bodyParameters": {
           "parameters": [
-            { "name": "From", "value": "={{ $env.TWILIO_WHATSAPP_FROM }}" },
-            { "name": "To", "value": "=whatsapp:{{ $json.team_whatsapp.replace(/[^0-9+]/g, '') }}" },
-            { "name": "ContentSid", "value": "={{ $env.TWILIO_CONTENT_SID_TEAM_DISPATCH }}" },
-            { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.team_name,\n  '2': $json.slot_start_human,\n  '3': $json.customer_name,\n  '4': $json.address,\n  '5': $json.building_name || '-',\n  '6': $json.flat_number || '-',\n  '7': $json.additional_directions || 'None',\n  '8': $json.plan,\n  '9': $json.customer_phone,\n  '10': $json.maps_link\n}) }}" }
+            { "name": "From", "value": "={{ $json.body.twilio_from || 'whatsapp:+15559870195' }}" },
+            { "name": "To", "value": "=whatsapp:{{ $json.body.team_whatsapp.replace(/[^0-9+]/g, '') }}" },
+            { "name": "ContentSid", "value": "={{ $json.body.content_sid || 'HX64fee64ee53d14b02137fb188ea17cd3' }}" },
+            { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.body.team_name,\n  '2': $json.body.slot_start_human,\n  '3': $json.body.customer_name,\n  '4': $json.body.address,\n  '5': $json.body.building_name || '-',\n  '6': $json.body.flat_number || '-',\n  '7': $json.body.additional_directions || 'None',\n  '8': $json.body.plan,\n  '9': $json.body.customer_phone,\n  '10': $json.body.maps_link\n}) }}" }
           ]
         },
         "options": {}
@@ -40,7 +40,7 @@
       "position": [500, 200],
       "credentials": {
         "httpBasicAuth": {
-          "id": "CONFIGURE_ME",
+          "id": "4RkcGDN9X6hNuKWv",
           "name": "Twilio Basic Auth (Account SID / Auth Token)"
         }
       }
@@ -61,8 +61,8 @@
       "position": [500, 420],
       "credentials": {
         "smtp": {
-          "id": "CONFIGURE_ME",
-          "name": "SMTP — configure in n8n credentials"
+          "id": "woEEVaaZgFFtA1gv",
+          "name": "Resend SMTP"
         }
       }
     }
@@ -79,13 +79,5 @@
   },
   "settings": {
     "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": [
-    { "name": "ductly" },
-    { "name": "dispatch" },
-    { "name": "team" }
-  ],
-  "pinData": {},
-  "versionId": "2"
+  }
 }

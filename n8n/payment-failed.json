@@ -13,7 +13,10 @@
       "name": "Webhook: Payment Failed",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [220, 300],
+      "position": [
+        220,
+        300
+      ],
       "webhookId": "payment-failed"
     },
     {
@@ -29,11 +32,14 @@
       "name": "Send Failure Email",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [500, 200],
+      "position": [
+        500,
+        200
+      ],
       "credentials": {
         "smtp": {
-          "id": "CONFIGURE_ME",
-          "name": "SMTP — configure in n8n credentials"
+          "id": "woEEVaaZgFFtA1gv",
+          "name": "Resend SMTP"
         }
       }
     },
@@ -50,11 +56,14 @@
       "name": "Notify Admin",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [500, 420],
+      "position": [
+        500,
+        420
+      ],
       "credentials": {
         "smtp": {
-          "id": "CONFIGURE_ME",
-          "name": "SMTP — configure in n8n credentials"
+          "id": "woEEVaaZgFFtA1gv",
+          "name": "Resend SMTP"
         }
       }
     }
@@ -63,21 +72,21 @@
     "Webhook: Payment Failed": {
       "main": [
         [
-          { "node": "Send Failure Email", "type": "main", "index": 0 },
-          { "node": "Notify Admin", "type": "main", "index": 0 }
+          {
+            "node": "Send Failure Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Admin",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": [
-    { "name": "ductly" },
-    { "name": "payment" },
-    { "name": "alert" }
-  ],
-  "pinData": {},
-  "versionId": "1"
+  }
 }

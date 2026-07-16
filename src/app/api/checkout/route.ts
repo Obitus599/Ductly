@@ -6,16 +6,10 @@ import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
 import { vatFromNet, VAT_RATE_PERCENT } from "@/lib/vat";
 import { isContactVerified, normalizeIdentifier } from "@/lib/verification";
 import { isUaeMobile } from "@/lib/phone-uae";
+import { PLANS, calcJobDuration } from "@/lib/pricing";
+import type { PlanTier } from "@/lib/pricing";
 
-/**
- * Pricing: plan tier rate × number of thermostats.
- * Duration: setup time + per-thermostat work time.
- */
-const PLAN_CONFIG: Record<string, { rate: number; setupMins: number; perThermostatMins: number }> = {
-  essential: { rate: 349, setupMins: 45, perThermostatMins: 45 },
-  signature: { rate: 549, setupMins: 80, perThermostatMins: 45 },
-  elite:     { rate: 649, setupMins: 80, perThermostatMins: 60 },
-};
+const PLAN_CONFIG = PLANS;
 
 /**
  * POST /api/checkout

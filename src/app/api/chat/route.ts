@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { PLANS } from "@/lib/pricing";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 const MAX_TOKENS = 300;
 const MAX_MESSAGES = 10;
 const MAX_USER_INPUT_LENGTH = 500;
-const HELPLINE = "+971 54 161 0793";
-const HELPLINE_EMAIL = "info@ductly.ae";
+const HELPLINE = process.env.HELPLINE_PHONE || "+971 54 161 0793";
+const HELPLINE_EMAIL = process.env.HELPLINE_EMAIL || "info@ductly.ae";
+
+const e = PLANS.essential; const s = PLANS.signature; const el = PLANS.elite;
 
 const SYSTEM_PROMPT = `You are a helpful assistant for DUCTly, UAE's #1 duct cleaning and HVAC maintenance company. You ONLY answer questions related to DUCTly's services, pricing, booking, and general duct cleaning / HVAC maintenance topics in the UAE.
 
@@ -30,17 +33,17 @@ SERVICES & COVERAGE:
 - Free estimates for all residential and commercial properties — no obligation
 
 PLANS & PRICING (all prices in AED per thermostat, exclusive of 5% VAT — VAT is added at checkout):
-1. Essential — 349 AED/thermostat
-   Basic duct vacuuming. Perfect for light maintenance.
-   Includes: TurboClean, Fan coil unit cleaning, HEPA vacuuming, Filter cleaning
+1. ${e.label} — ${e.rate} AED/thermostat
+   ${e.tagline}
+   Typical job duration: ${e.setupMins + e.perThermostatMins * 4} min
 
-2. Signature — 549 AED/thermostat (BEST DEAL)
-   Full medical-grade sanitization and restoration.
-   Includes: TurboClean, Filter cleaning, Fan coil unit cleaning, Fumigation, Bio-enzyme disinfection, Mold remediation treatment, Black mold remediation
+2. ${s.label} — ${s.rate} AED/thermostat (BEST DEAL)
+   ${s.tagline}
+   Typical job duration: ${s.setupMins + s.perThermostatMins * 4} min
 
-3. Elite — 649 AED/thermostat
-   Ultimate protection with 12-month air purity guarantee.
-   Includes: Everything in Signature + AC unit coil deep clean, Air quality analysis
+3. ${el.label} — ${el.rate} AED/thermostat
+   ${el.tagline}
+   Typical job duration: ${el.setupMins + el.perThermostatMins * 4} min
 
 BOOKING & PROCESS:
 - Book online at ductly.ae/book
@@ -50,7 +53,7 @@ BOOKING & PROCESS:
 
 FAQ:
 Q: How much does your cleaning service cost?
-A: Our pricing starts at 349 AED per thermostat for the Essential plan. We offer three tiers — Essential, Signature, and Elite — to match your needs and budget. Contact us for a personalized quote.
+A: Our pricing starts at ${e.rate} AED per thermostat for the ${e.label} plan. We offer three tiers — ${e.label}, ${s.label}, and ${el.label} — to match your needs and budget. Contact us for a personalized quote.
 
 Q: Do you offer a free cleaning services estimate?
 A: Yes, we provide free estimates for all residential and commercial properties. Our team will assess your HVAC system and provide a detailed quote with no obligation.

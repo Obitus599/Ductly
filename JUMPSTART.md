@@ -1,241 +1,279 @@
-# DUCTly — Jumpstart Prompt (July 14, 2026)
+# DUCTly — Project State (July 16, 2026 — Pre-Production)
 
-## Project Basics
+## Project Overview
 
-Next.js 14 app deployed on Plesk at `staging.ductly.ae` and `ductly.ae`. Stripe for payments, n8n at `n8n.ductly.ae` for WhatsApp/email automation, Supabase for database (Postgres), Twilio for WhatsApp Business API.
+Next.js 14.2 app deployed on Plesk at `staging.ductly.ae` and `ductly.ae`. Stripe for payments. n8n at `n8n.ductly.ae` for WhatsApp/email automation. Supabase for database (Postgres). Twilio for WhatsApp Business API. GitHub Actions CI/CD.
 
-| Service | Details |
+| Layer | Technology |
 |---|---|
-| **App** | Next.js 14.2, React 18, TypeScript, Tailwind CSS |
-| **DB** | Supabase Postgres at `xmukqwscunwjfnfhllcl.supabase.co` |
-| **Payments** | Stripe (live keys in `.env.local`) |
-| **Automation** | n8n at `n8n.ductly.ae` (6 legacy + 2 new workflows) |
-| **WhatsApp** | Twilio sender `+15559870195` (US number, Connected) |
-| **Email** | Resend SMTP at `noreply@ductly.ae` |
+| **App** | Next.js 14.2, React 18, TypeScript, Tailwind CSS 4 |
+| **DB** | Supabase Postgres (`xmukqwscunwjfnfhllcl.supabase.co`) |
+| **Payments** | Stripe (live keys) |
+| **Automation** | n8n at `n8n.ductly.ae` (9 active workflows) |
+| **WhatsApp** | Twilio Business API sender `+15559870195` |
+| **Email** | Resend SMTP via n8n at `noreply@ductly.ae` |
 | **CI/CD** | GitHub Actions: lint → typecheck → test:coverage → build → deploy on push to main |
-| **Server** | Plesk at `136.144.243.31:8443` (root / `!Pl3sk2026FFAA!`) |
-| **Git** | `https://github.com/Obitus599/Ductly` |
-
-## Credentials (All Active)
-
-| Service | Key |
-|---|---|
-| **Twilio SID** | `ACe6bc...` |
-| **Twilio Token** | `f80eaa984bca5a581d426f5a106e6063` |
-| **WhatsApp From** | `whatsapp:+15559870195` |
-| **Supabase DB** | `postgres:Oblivion@1` at pooler:6543 |
-| **Resend SMTP** | `re_4XUVyUwe_3zVp2s8wXr9bi1g6KFG1NWM5` |
-| **n8n API Key** | `eyJhbGciOiJIUzI1NiIs...` (JWT — read-only; can't activate/deactivate via API) |
-| **Plesk** | `root` / `!Pl3sk2026FFAA!` at `136.144.243.31:8443` |
-| **Test Phone** | `+917042009519` |
-| **Stripe Test Card** | `4242 4242 4242 4242` (any future CVC/ZIP) |
-
-## Pricing
-
-| Plan | Rate (AED/thermostat) |
-|---|---|
-| Essential | 349 |
-| Signature | 549 |
-| Elite | 649 |
-
-Note: User requested 699 for Elite; code currently has 649. Not yet reconciled.
-
-## Database State
-
-18 tables, 2 views, 3 RPC functions. Core reference data:
-
-| Table | Rows | Notes |
-|---|---|---|
-| `teams` | 3 | "Elite Cleaners" (`whatsapp:+971501234567`, active), 2 test teams |
-| `team_schedules` | 7 | All days 08:00-20:00 for Elite Cleaners |
-| `customers` | 0 | Empty (data was wiped) |
-| `bookings` | 0 | Empty |
-| `error_log` | 0 | Empty |
-
-**Schema matches all migrations.** `job_status_prompts` table exists (ready for job-completion flow).
-
-## n8n — Workflows
-
-### 6 Legacy Workflows (Active, Working)
-
-| Workflow | Type | Trigger | WhatsApp To |
-|---|---|---|---|
-| Booking Confirmed | Webhook `booking-confirmed` | Stripe webhook via Next.js | Customer |
-| Team Dispatch | Webhook `team-dispatch` | Stripe → Layer 2 agent → n8n | Field team |
-| Booking Reminders (24h + 1h) | Cron 30min | SQL: upcoming bookings | Customer |
-| Feedback Request | Cron 1h | SQL: completed 2h ago | Customer |
-| No-Show Follow-Up | Cron 1h | SQL: no_show 30min ago | Customer + admin |
-| Payment Failed | Webhook `payment-failed` | Stripe webhook | Email only |
-
-**CRITICAL**: WhatsApp values are HARDCODED in n8n nodes, not env vars. Community edition of n8n can't add env vars. Always hardcode values in workflow JSONs. Never use PUT to update workflows — it corrupts connections. Use POST import from local JSON files.
-
-### 2 New Workflows (Need Activation)
-
-| Workflow | n8n ID | Webhook Path | Status |
-|---|---|---|---|
-| Ops Alerts | `UbdywcNYLMpiG27J` | `ops-alert-v2` | Imported, **needs activation** |
-| Job Status Prompt | `ex4b2VYwxiBAj0R0` | Cron 15min | Imported, **needs activation** |
-
-**Ops Alert** (`n8n/ops-alert.json`):
-- Webhook `POST /ops-alert-v2`
-- WhatsApp to `+917042009519` (hardcoded) via `ductly_ops_alert` template (SID: `HXb620...`)
-- Email to `admin@ductly.ae`
-- Env var: `N8N_WEBHOOK_OPS_ALERT=https://n8n.ductly.ae/webhook/ops-alert-v2`
-- Fired from 8 code points: new_booking, reschedule, cancellation, blackout, job_not_completed, payment_orphan, invoice_failed, blackout_removed
-
-**Job Status Prompt** (`n8n/job-status-prompt.json`):
-- Cron every 15 minutes
-- Queries bookings 45-75 min after start (status=confirmed, no existing prompt)
-- Sends `ductly_job_status` Quick Reply WhatsApp to team
-- Writes `job_status_prompts` row for reply correlation
-- Email log to admin@ductly.ae
-
-### Workflow Credential IDs (from live server)
-```
-Twilio:  4RkcGDN9X6hNuKWv  (httpBasicAuth)
-Postgres: KEEnB64Vep0U1RKJ
-SMTP:    woEEVaaZgFFtA1gv   (Resend)
-```
-
-## WhatsApp Templates — Content SIDs
-
-### Active in `.env.local` (n8n-referenced)
-| Template | SID |
-|---|---|
-| `booking_confirmed` | `HXee77d5031bbe740812f80af9b58bed7f` |
-| `booking_reminder_24h` | `HX2f72159ca0479088dc89ed6d534d75fe` |
-| `booking_reminder_1h` | `HX515f7ed987c7c9fa8c7af420d1a19ab8` |
-| `feedback_request` | `HX1cb2650480bc7e0b5e5709eba5f0bb54` |
-| `no_show_followup` | `HX047858a56c27cb0bb9c987f7f4904dd1` |
-| `team_dispatch` | `HXac2c655f77400b65b21c0c42e87705b4` |
-
-### Active in `.env.local` (Next.js-referenced)
-| Template | SID | Used By |
-|---|---|---|
-| `ductly_invoice` | `HX3d5953198f7bf9e655dc011c8a272917` | `job-completion.ts` |
-| `ductly_job_status` | `HX7ab7ed05d0e43e8380282170fd6fdc29` | Job Status Prompt workflow |
-| `ductly_ops_alert` | `HXb620c5bda6c771bfeb872d384e3cae66` | Ops Alert workflow |
-| `ductly_ping` | `HX6b16842dafd4a38b6307af821e9f341e` | `test-ping` route |
-| `ductly_verify` | `HX69bddd2f8f60e27d3b1e65c380880da8` | `twilio-verify.ts` |
-
-### Template JSONs (for creating in Twilio)
-- `scripts/twilio/templates/*.json` — 6 original templates
-- `scripts/twilio/templates-v2/*.json` — 3 templates (invoice, job_status, ops_alert)
-- `scripts/twilio/templates-v3/ductly_verify.json` — OTP verification
-- `scripts/twilio/templates-ping/ductly_ping.json` — Team ping
-- Run: `bash scripts/twilio/create-templates.sh <subdir>`
+| **Server** | Plesk at `136.144.243.31:8443` |
+| **Sentry** | Not installed yet (planned) |
 
 ## Test State
 
 - **42 test files, 381 tests, 0 failures**
 - Coverage: 68% statements / 70% functions / 70% lines (thresholds: 60/60/60)
+- Typecheck: PASS
 - Run: `npx vitest run --coverage`
 
-## What Was Done This Session (July 14, 2026)
+## Test Phone Numbers
 
-### 1. GA4 Integration
-- Installed `@next/third-parties`, added `GoogleAnalytics` to root layout
-- Updated CSP in `next.config.mjs` for `googletagmanager.com` and `google-analytics.com`
-- `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-DGT9JVQ7H1` in `.env.local`
+| Role | Number | WhatsApp |
+|---|---|---|
+| Primary test / Owner | `+91 70420 09519` | `whatsapp:+917042009519` |
+| Colleague | `+971 56 111 3186` | `whatsapp:+971561113186` |
 
-### 2. Database Recovery
-- Seeded 1 team ("Elite Cleaners") + 7 daily schedules
-- Applied all pending migrations from origin (25 commits pulled)
+## Database State
 
-### 3. WhatsApp Template Pipeline
-- Created `ductly_ping` template (SID: `HX6b1684...`) in Twilio
-- Created `ductly_verify` template (SID: `HX69bddd...`) in Twilio
-- Approval pending Meta review (utility templates)
-
-### 4. Test-Ping Route
-- Switched from SMS → WhatsApp Content API using `twilio-whatsapp.ts` lib
-- Route: `src/app/api/admin/teams/test-ping/route.ts`
-
-### 5. Automated Messages — 3 New Flows
-- **Ops Alerts**: `n8n/ops-alert.json` — WhatsApp to owner + email on 8 event types
-- **Job Status Prompt**: `n8n/job-status-prompt.json` — Cron sends Quick Reply WhatsApp to team
-- **Invoice WhatsApp Delivery**: `job-completion.ts` sends `ductly_invoice` WhatsApp on job completion
-
-### 6. n8n Server Troubleshooting
-- n8n POST API returns 500 → restarted via Plesk CLI scheduler
-- UTF-8 encoding issues (em dashes corrupted to `â€"`) → fixed with ASCII
-- n8n community edition can't add env vars → hardcoded phone in workflows
-- Webhook path conflicts → used `ops-alert-v2` path
-
-## Work Remaining
-
-### High Priority (Blocking Launch)
-| Task | Details |
+| Table | Key Data |
 |---|---|
-| **Activate new n8n workflows** | `UbdywcNYLMpiG27J` (ops-alert-v2) and `ex4b2VYwxiBAj0R0` (job-status-prompt) must be activated in n8n UI. Path: Settings → Workflows → toggle Active. Delete old broken ones (`rWlDSET2Lp4cOkWh`, `eQ5qkQvlKPPRmHeZ`). |
-| **Test full booking flow on staging** | Book with test phone `+917042009519`. Verify: Stripe webhook fires → WhatsApp booking confirmation received → team dispatch WhatsApp received → ops alert WhatsApp received. |
-| **Elite pricing fix** | Code has 649, user wants 699. Update in `checkout/route.ts`, `admin/bookings/create/route.ts`, and all test files. |
+| `teams` | "Elite Cleaners" (whatsapp:+917042009519), "Test" (+971561113186), both active |
+| `team_schedules` | 7 days for Elite Cleaners, 08:00-20:00 daily |
+| `customers` | Test data present |
+| `bookings` | Test data present |
+| `error_log` | Active, records webhook failures + replay payloads |
 
-### Medium Priority (Post-Launch)
-| Task | Details |
-|---|---|
-| **Cancellation notifications** | No WhatsApp/email when booking cancelled via manage or admin. Fire ops_alert or new n8n flow. |
-| **Reschedule notifications** | No notification to customer/team on reschedule. |
-| **4-day reminder** | Master doc planned it. Only 24h/1h exist. New Twilio template + n8n flow + DB column needed. |
-| **30-day re-engagement** | Planned, not built. Cron scans inactive customers → re-engagement WhatsApp. |
-| **Cookie consent banner** | Per `CURRENT_PIPELINE.md`. GA4 should be gated behind consent. |
-| **Meta template approvals** | `ductly_ping` and `ductly_verify` need Meta approval. Check Twilio Console → Content Template Builder. |
-| **Admin route test coverage** | 9 admin routes at 0% coverage. |
-
-### Deferred
-| Task | Details |
-|---|---|
-| **Team scheduler / shift notifications** | Notify team at start of shift with daily schedule. |
-| **Sentry/error monitoring** | Currently no production error tracking. |
-| **Promo codes, addon services** | Per pipeline doc. |
-| **Arabic i18n (RTL)** | UAE market requirement. |
-| **Recurring bookings** | Not started. |
-
-### Old Broken Workflows on n8n (Delete These)
-```
-yDBdKXOwkSaManip   — Old ops-alert (UTF-8 corrupted, env var IF nodes)
-y5KThSu9ITYxBvfy   — Old job-status-prompt (UTF-8 corrupted name)
-rWlDSET2Lp4cOkWh   — Old ops-alert (conflicting webhook path)
-eQ5qkQvlKPPRmHeZ   — Old ops-alert (conflicting webhook path)
-```
-
-## Key File Paths
+## Key Files
 
 | File | Purpose |
 |---|---|
-| `src/app/api/webhooks/stripe/route.ts` | Stripe webhook handler (booking confirm, team dispatch, ops alerts, payment failed) |
-| `src/app/api/checkout/route.ts` | Checkout/pricing |
-| `src/lib/job-completion.ts` | Job completion + invoice WhatsApp delivery |
-| `src/lib/ops-alert.ts` | Ops alert events and n8n webhook firing |
-| `src/lib/twilio-whatsapp.ts` | Shared WhatsApp template sender |
-| `src/app/api/admin/teams/test-ping/route.ts` | Team ping via WhatsApp template |
+| `src/lib/pricing.ts` | **Single source of truth** for plan pricing (349/549/649), durations, labels, taglines |
+| `src/app/api/webhooks/stripe/route.ts` | Stripe webhook — booking confirmation, team assignment, n8n dispatch, ops alerts |
+| `src/app/api/checkout/route.ts` | Checkout API — pricing, Stripe session creation, slot locking |
+| `src/lib/ops-alert.ts` | 8 alert types: new_booking, reschedule, cancellation, blackout, blackout_removed, job_not_completed, payment_orphan, invoice_failed |
+| `src/lib/job-completion.ts` | Team WhatsApp replies → job completion + FTA invoice issuance |
+| `src/lib/twilio-whatsapp.ts` | Shared WhatsApp Content Template sender (used by Next.js, not n8n) |
+| `src/lib/scheduling-agent.ts` | AI team assignment (OpenRouter GPT-4o + deterministic fallback) |
+| `src/lib/dispatch-format.ts` | UAE-local time formatting, Google Maps links, address quality |
+| `src/lib/n8n.ts` | Fire-and-forget n8n webhook caller with error_log fallback |
 | `.env.local` | Local dev env (gitignored, manually set on Plesk) |
 | `.env.example` | Template (committed) |
-| `n8n/*.json` | n8n workflow definitions (source of truth for imports) |
-| `scripts/twilio/templates*/` | Twilio template JSONs for Content API |
-| `supabase/schema.sql` + `migrations/` | DB schema (source for Supabase) |
+| `n8n/*.json` | 9 n8n workflow definitions (source of truth for imports) |
+| `src/app/admin/**` | Admin panel (bookings, teams, calendar, customers, feedback, errors, travel, revenue, settings) |
+
+## Pricing (Single Source: `src/lib/pricing.ts`)
+
+| Plan | Rate (AED/thermostat) | Setup | Per Thermostat | VAT |
+|---|---|---|---|---|
+| Essential | 349 | 45 min | 45 min | +5% |
+| Signature | 549 | 80 min | 45 min | +5% |
+| Elite | 649 | 80 min | 60 min | +5% |
+
+All prices display as VAT-exclusive (VAT added at Stripe checkout). All 7 files that reference pricing now import from `src/lib/pricing.ts` — single source of truth.
+
+## WhatsApp Templates — All 11 Approved & Working
+
+| Template | Content SID | Type | Vars | Status |
+|---|---|---|---|---|
+| booking_confirmed | HXee77d5031bbe740812f80af9b58bed7f | text | 4 | ✓ Approved |
+| booking_reminder_24h | HX2f72159ca0479088dc89ed6d534d75fe | text | 4 | ✓ Approved |
+| booking_reminder_1h | HX515f7ed987c7c9fa8c7af420d1a19ab8 | text | 3 | ✓ Approved |
+| feedback_request | HX1cb2650480bc7e0b5e5709eba5f0bb54 | text | 2 | ✓ Approved |
+| no_show_followup | HX047858a56c27cb0bb9c987f7f4904dd1 | text | 2 | ✓ Approved |
+| team_dispatch | HX64fee64ee53d14b02137fb188ea17cd3 | text | 10 | ✓ Approved |
+| ductly_ops_alert | HX3d8c4a4e06a7aa812209e1e64b64055a | text | 6 | ✓ Approved |
+| ductly_job_status | HX7ab7ed05d0e43e8380282170fd6fdc29 | quick-reply | 3 | ✓ Approved |
+| ductly_invoice | HX00f8163e4f20584eb40a54861ec7d8c8 | text | 6 | ✓ Approved |
+| ductly_ping | HX6b16842dafd4a38b6307af821e9f341e | text | 1 | ✓ Approved |
+| ductly_verify | HX69bddd2f8f60e27d3b1e65c380880da8 | auth | 1 | ✓ Approved |
+
+## n8n — 9 Active Workflows
+
+### Webhook-Triggered (modular: values from Next.js payload)
+
+| Workflow | Trigger | WhatsApp To | ContentSid |
+|---|---|---|---|
+| Booking Confirmed | `POST /booking-confirmed` | `$json.body.customer_phone` | `$json.body.content_sid` |
+| Team Dispatch | `POST /team-dispatch` | `$json.body.team_whatsapp` | `$json.body.content_sid` |
+| Ops Alerts | `POST /ops-alert-v2` | `$json.body.owner_phone` | `$json.body.content_sid` |
+| Payment Failed | `POST /payment-failed` | Email only | — |
+| Verify Email | `POST /verify-email` | Email only | — |
+
+### Cron-Triggered (hardcoded values — unavoidable in n8n community edition)
+
+| Workflow | Schedule | WhatsApp To |
+|---|---|---|
+| Booking Reminders (24h + 1h) | Every 30 min | `$json.customer_phone` (from SQL) |
+| Feedback Request | Every 1 hour | `$json.customer_phone` (from SQL) |
+| No-Show Follow-Up | Every 1 hour | `$json.customer_phone` (from SQL) |
+| Job Status Prompt | Every 15 min | `$json.team_whatsapp` (from SQL) |
+
+### Credential IDs (all active, no CONFIGURE_ME placeholders)
+```
+Twilio:   4RkcGDN9X6hNuKWv  (httpBasicAuth)
+Postgres: KEEnB64Vep0U1RKJ
+SMTP:     woEEVaaZgFFtA1gv   (Resend)
+```
+
+### Import Rules
+- Never use PUT — it corrupts connections
+- Use POST import from `n8n/*.json` files
+- Webhook workflows get `twilio_from` + `content_sid` from Next.js payload
+- Cron workflows have hardcoded From/ContentSid (n8n community edition can't use $env.*)
+
+## Admin Panel — `/admin`
+
+| Page | Status | Notes |
+|---|---|---|
+| Dashboard | ✓ | Stats, recent bookings, team workloads |
+| Bookings | ✓ | List, filter, create, detail, cancel+refund |
+| Teams | ✓ | Add, toggle active, test-ping. No schedule edit UI yet |
+| Calendar | ✓ | Day view, blackout management |
+| Customers | ✓ | Searchable, paginated |
+| Feedback | ✓ | Ratings, team filter |
+| Revenue | ✓ | Period-selectable booking counts |
+| Error Log | ✓ | Filter by flow, expandable payload |
+| Travel Calc | ✓ | Google Maps distance/time calculator |
+| Settings | ✓ | Read-only config reference |
+| Contacts | ✓ | Contact forms + newsletter |
+
+### Known Admin Gaps
+- No team schedule editing UI (schedules must be managed via DB)
+- No team delete (only deactivate)
+- Calendar may miss bookings spanning midnight
+- Feedback pagination breaks with team filter
+- 9 admin read routes at 0% test coverage
+
+## Production Readiness — Completed Fixes (July 16)
+
+- [x] NEXT_PUBLIC_APP_URL set to https://ductly.ae
+- [x] GA4 wrapped in conditional (no crash if env unset)
+- [x] ADMIN_API_KEY configured
+- [x] Admin booking create: `any` → typed `CreateBookingBody` interface
+- [x] All n8n JSONs cleaned (no staticData/tags/pinData/versionId)
+- [x] CONFIGURE_ME credentials replaced with real IDs in all 9 workflows
+- [x] 3 webhook workflows modularized (twilio_from + content_sid from payload)
+- [x] Pricing consolidated to single module (`src/lib/pricing.ts`)
+- [x] AI chat system prompt built dynamically from pricing
+- [x] Landing page FAQ + pricing from shared config
+- [x] Version bumped to 1.0.0
+- [x] All 11 WhatsApp templates Meta-approved and tested on 2 numbers
+- [x] Typecheck: PASS, Tests: 381/381 PASS
+
+## Remaining Pre-Launch Work
+
+### Blocker (must fix)
+- Nothing blocking — app is deployable
+
+### High Priority
+- Add team schedule editing UI
+- Fix admin cancel button silently swallowing refund failures
+- Fix booking detail error masking (shows "not found" for all errors)
+- Install Sentry for production error monitoring
+- Add loading.tsx + error.tsx for admin routes
+
+### Medium Priority
+- Console.log cleanup (89+ statements, wrap in dev-only)
+- Admin route test coverage (9 routes at 0%)
+- Split 1009-line page.tsx into components
+- CSP unsafe-eval verification/removal
+- Fix feedback pagination with team filter
+
+### Low Priority
+- Team delete functionality
+- Trustpilot reviews → dynamic
+- Arabic RTL i18n
+- Recurring bookings
+- Cookie consent banner for GA4
+
+## File Structure
+
+```
+src/
+  app/
+    api/
+      checkout/route.ts           Stripe checkout session creation
+      webhooks/
+        stripe/route.ts           Stripe webhook handler (booking confirm + dispatch + ops alert)
+        twilio/route.ts           Twilio WhatsApp inbound webhook (job status replies)
+      admin/
+        auth/route.ts             Admin login/logout
+        bookings/route.ts         List bookings
+        bookings/[id]/route.ts    Booking detail + update
+        bookings/[id]/cancel/route.ts   Cancel + refund
+        bookings/create/route.ts  Manual booking creation
+        teams/route.ts            Teams CRUD
+        teams/test-ping/route.ts  WhatsApp reachability test
+        calendar/route.ts         Calendar data
+        schedule-blackouts/route.ts  Blackout management
+        stats/route.ts            Dashboard stats
+        customers/route.ts        Customer list
+        feedback/route.ts         Feedback list
+        revenue/route.ts          Revenue/overview
+        contacts/route.ts         Contact forms + newsletter
+        errors/route.ts           Error log
+        export/route.ts           CSV export
+        travel/route.ts           Travel time calculator
+      slots/route.ts              Available time slots
+      verify/send/route.ts        OTP send (email + WhatsApp)
+      verify/check/route.ts       OTP verification
+      chat/route.ts               AI chatbot
+      booking-details/route.ts    Post-payment booking details
+      booking-locks/route.ts      Slot locking
+      manage/[token]/route.ts     Customer manage booking
+      manage/[token]/cancel/route.ts  Customer self-cancel
+      manage/[token]/reschedule/route.ts  Customer self-reschedule
+      contact/route.ts            Contact form submission
+      newsletter/route.ts         Newsletter signup
+      me/delete/route.ts          GDPR data deletion
+      me/export/route.ts          GDPR data export
+      health/route.ts             Health check
+    admin/
+      page.tsx                    Dashboard
+      bookings/                   Bookings management
+      teams/                      Teams management
+      calendar/                   Calendar view
+      customers/                  Customer list
+      feedback/                   Feedback/reviews
+      revenue/                    Revenue overview
+      errors/                     Error log
+      travel/                     Travel calculator
+      settings/                   Configuration reference
+      contacts/                   Contact forms
+      login/                      Admin login
+    book/                         Public booking flow (details → calendar → checkout → success)
+    page.tsx                      Landing page
+  lib/
+    pricing.ts                    Single source: plan rates, durations, labels, taglines
+    ops-alert.ts                  8 alert event types + fireOpsAlert()
+    job-completion.ts             Team job status replies → completion + invoice
+    n8n.ts                        n8n webhook fire-and-forget
+    twilio-whatsapp.ts            WhatsApp Content Template sender
+    scheduling-agent.ts           AI team assignment
+    dispatch-format.ts            UAE time formatting, maps links
+    stripe.ts                     Stripe client
+    email.ts                      Resend email sender
+    email-templates.ts            Verification email HTML
+    vat.ts                        UAE VAT calculations (5%)
+    slot-helpers.ts               Slot generation, operating hours (08:00-18:00)
+    rate-limit.ts                 IP-based rate limiting
+    admin-auth.ts                 requireAdmin() + requireSameOrigin() CSRF
+    consent.ts                    PDPL consent versioning
+    verification.ts               OTP generation + verification
+    phone-uae.ts                  UAE phone normalization
+    invoice.ts                    FTA tax invoice PDF generation
+    travel-math.ts                Google Maps distance/time
+    supabase/                     Supabase client (server + browser)
+  components/
+    ChatWidget.tsx                AI customer service chat
+    ... UI components
+  __tests__/                      42 test files
+n8n/                              9 workflow JSON definitions
+```
 
 ## Development Commands
 
 ```bash
-npm run dev              # Start dev server
-npx vitest run --coverage # Run tests with coverage
+npm run dev              # Start dev server (port 3003)
+npm run build            # Production build (runs vitest first via prebuild hook)
+npx vitest run           # Run tests
+npx vitest run --coverage  # Tests with coverage
 npx tsc --noEmit          # TypeScript typecheck
 ```
-
-## n8n Plesk Server Commands (for restarting n8n remotely)
-
-Plesk REST API: `https://136.144.243.31:8443/api/v2/` with Basic Auth (root / !Pl3sk2026FFAA!)
-Create and run scheduler task to restart n8n:
-```bash
-# Create a scheduled task via Plesk API:
-curl -k -X POST "https://136.144.243.31:8443/api/v2/cli/scheduler/call" \
-  -u "root:!Pl3sk2026FFAA!" \
-  -d '{"params":["--create","-user","root","-type","exec","-command","sudo -u ductly /home/ductly/.npm-global/bin/pm2 restart n8n 2>&1 || pkill -f n8n 2>&1","-schedule","0 0 1 1 *","-description","restart-n8n"]}'
-
-# Run the task (use the ID returned above):
-curl -k -X POST "https://136.144.243.31:8443/api/v2/cli/scheduler/call" \
-  -u "root:!Pl3sk2026FFAA!" \
-  -d '{"params":["--run","<ID>"]}'
-```
-**WARNING**: JSON must be written WITHOUT BOM (UTF-8). Use `[System.IO.File]::WriteAllText($path, $json, [System.Text.UTF8Encoding]::new($false))` in PowerShell.
