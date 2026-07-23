@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -60,7 +61,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${GeistSans.variable} antialiased`}>{children}</body>
+      <body className={`${GeistSans.variable} antialiased`}>
+        <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID!} />
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,0 +1,65 @@
+{
+  "name": "Ductly - Ops Alerts (Owner Notifications)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ops-alert-v2",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Ops Alert",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "ops-alert-v2"
+    },
+    {
+      "parameters": {
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ $env.TWILIO_ACCOUNT_SID }}/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "=whatsapp:+15559870195" },
+            { "name": "To", "value": "=whatsapp:+917042009519" },
+            { "name": "ContentSid", "value": "=HXb620c5bda6c771bfeb872d384e3cae66" },
+            { "name": "ContentVariables", "value": "={{ JSON.stringify({\n  '1': $json.body.alert_label || 'Alert',\n  '2': $json.body.customer_name || '',\n  '3': $json.body.when_human || $json.body.slot_start || '',\n  '4': $json.body.address || '',\n  '5': $json.body.team_name || '',\n  '6': $json.body.extra || ''\n}) }}" }
+          ]
+        },
+        "options": {},
+        "method": "POST"
+      },
+      "id": "whatsapp-owner",
+      "name": "WhatsApp: Owner (+917042009519)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 200],
+      "credentials": { "httpBasicAuth": { "id": "4RkcGDN9X6hNuKWv", "name": "Twilio Basic Auth (Account SID / Auth Token)" } }
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@ductly.ae",
+        "toEmail": "=admin@ductly.ae",
+        "subject": "={{ $json.body.alert_label || 'Alert' }} - Ductly Ops",
+        "emailType": "html",
+        "html": "=<p><strong>{{ $json.body.alert_label || 'Alert' }}</strong></p><ul><li><strong>Customer:</strong> {{ $json.body.customer_name || '-' }} ({{ $json.body.customer_phone || '-' }})</li><li><strong>When:</strong> {{ $json.body.when_human || $json.body.slot_start || '-' }}</li><li><strong>Where:</strong> {{ $json.body.address || '-' }}</li><li><strong>Team:</strong> {{ $json.body.team_name || '-' }}</li><li><strong>Booking:</strong> {{ $json.body.booking_id || '-' }}</li><li><strong>Source:</strong> {{ $json.body.source || '-' }}</li></ul><p>{{ $json.body.extra || '' }}</p>",
+        "options": {}
+      },
+      "id": "email-admin-log",
+      "name": "Email: Admin Log",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [500, 420],
+      "credentials": { "smtp": { "id": "woEEVaaZgFFtA1gv", "name": "Resend SMTP" } }
+    }
+  ],
+  "connections": {
+    "Webhook: Ops Alert": { "main": [ [ { "node": "WhatsApp: Owner (+917042009519)", "type": "main", "index": 0 }, { "node": "Email: Admin Log", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1", "callerPolicy": "workflowsFromSameOwner" }
+}

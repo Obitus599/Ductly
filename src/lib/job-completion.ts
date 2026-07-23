@@ -1,6 +1,9 @@
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { fireOpsAlert } from "@/lib/ops-alert";
 import { issueInvoiceForBooking } from "@/lib/issue-invoice";
+import { sendWhatsAppTemplate } from "@/lib/twilio-whatsapp";
+import { formatSlotForDispatch } from "@/lib/dispatch-format";
+import type { InvoiceRow } from "@/lib/invoice";
 
 /**
  * Job-completion handling (#9). A team taps the ductly_job_status
@@ -40,6 +43,71 @@ export function outcomeFromButton(
   return null;
 }
 
+async function sendInvoiceWhatsApp(
+  bookingId: string,
+  invoice: InvoiceRow
+): Promise<void> {
+  const contentSid = process.env.TWILIO_CONTENT_SID_DUCTLY_INVOICE;
+  if (!contentSid) {
+    console.warn("[job-completion] TWILIO_CONTENT_SID_DUCTLY_INVOICE not configured; skipping invoice WhatsApp");
+    return;
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://ductly.ae";
+
+  const { data: booking } = await supabaseAdmin
+    .from("bookings")
+    .select("slot_start, customer_id")
+    .eq("id", bookingId)
+    .returns<{ slot_start: string; customer_id: string }[]>()
+    .single();
+
+  if (!booking?.customer_id) {
+    console.warn(`[job-completion] no customer_id for booking ${bookingId}; skipping invoice WhatsApp`);
+    return;
+  }
+
+  const { data: customer } = await supabaseAdmin
+    .from("customers")
+    .select("name, phone")
+    .eq("id", booking.customer_id)
+    .returns<{ name: string; phone: string }[]>()
+    .single();
+
+  if (!customer?.phone) {
+    console.warn(`[job-completion] no customer phone for booking ${bookingId}; skipping invoice WhatsApp`);
+    return;
+  }
+
+  const dateFormatted = booking.slot_start
+    ? formatSlotForDispatch(booking.slot_start)
+    : "";
+  const totalAED = `AED ${(invoice.total_fils / 100).toLocaleString("en-AE", { minimumFractionDigits: 2 })}`;
+
+  const result = await sendWhatsAppTemplate(
+    customer.phone,
+    contentSid,
+    {
+      "1": customer.name,
+      "2": dateFormatted,
+      "3": invoice.invoice_number,
+      "4": totalAED,
+      "5": invoice.supplier_trn || "",
+      "6": `${appUrl}/api/invoices/${bookingId}`,
+    }
+  );
+
+  if (!result.ok) {
+    console.error(
+      `[job-completion] invoice WhatsApp failed for ${bookingId}: ${result.errorMessage}`
+    );
+  } else {
+    console.log(
+      `[job-completion] invoice WhatsApp sent to ${customer.phone} for booking ${bookingId}`
+    );
+  }
+}
+
 async function completeJob(bookingId: string): Promise<string | undefined> {
   // Only a still-confirmed booking can be completed. Scoping the update
   // to status='confirmed' (and checking rows affected) prevents flipping
@@ -62,10 +130,12 @@ async function completeJob(bookingId: string): Promise<string | undefined> {
   }
 
   // Issue the invoice now so it exists with its number; WhatsApp delivery
-  // of the PDF is wired separately once the ductly_invoice template is
-  // approved. A missing price snapshot shouldn't fail the completion.
+  // of the PDF to the customer follows immediately.
   try {
     const invoice = await issueInvoiceForBooking(bookingId);
+    sendInvoiceWhatsApp(bookingId, invoice).catch((err) =>
+      console.error("[job-completion] invoice WhatsApp send failed:", err)
+    );
     return invoice.invoice_number;
   } catch (err) {
     // Don't fail the completion, but DON'T let a missing invoice be
