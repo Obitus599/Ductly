@@ -73,69 +73,72 @@ async function handle(request: NextRequest) {
       await supabaseAdmin.from("booking_locks").delete().eq("session_id", sessionId);
     }
   };
-
-  // ── Cancel / failure ─────────────────────────────────────────────
-  if (result === "cancel") {
-    await releaseLock();
+  const markStatus = async (status: string) => {
     if (booking.status === "pending") {
-      await supabaseAdmin
-        .from("bookings")
-        .update({ status: "expired" } as never)
-        .eq("id", bookingId);
+      await supabaseAdmin.from("bookings").update({ status } as never).eq("id", bookingId);
     }
-    return redirect("/book?cancelled=1");
-  }
-  if (result === "failure") {
-    if (booking.status === "pending") {
-      await supabaseAdmin
-        .from("bookings")
-        .update({ status: "payment_failed" } as never)
-        .eq("id", bookingId);
-    }
-    return redirect("/book?payment_failed=1");
-  }
+  };
 
-  // ── Success: verify + capture server-side ────────────────────────
+  // NEVER trust the `result` param for a state change — always verify the
+  // real Tabby status server-to-server and act on THAT. Trusting
+  // result=cancel while the payment is actually AUTHORIZED would expire a
+  // booking whose money the webhook then captures but can no longer confirm
+  // (a captured-but-orphaned charge).
   const paymentId = booking.tabby_payment_id;
-  if (!paymentId) return redirect("/book?payment_failed=1");
+  if (paymentId) {
+    const retrieved = await retrievePayment(paymentId);
+    const st = retrieved.paymentStatus;
 
-  const totalFils = booking.price_total_fils || 0;
-  const retrieved = await retrievePayment(paymentId);
-
-  let captured = false;
-  if (retrieved.paymentStatus === "CLOSED") {
-    captured = true; // already captured (e.g. by the webhook)
-  } else if (retrieved.paymentStatus === "AUTHORIZED") {
-    const cap = await capturePayment(paymentId, totalFils);
-    captured = cap.ok || cap.paymentStatus === "CLOSED";
-    if (!captured) {
-      // Possible concurrent capture by the webhook — re-check.
-      const recheck = await retrievePayment(paymentId);
-      captured = recheck.paymentStatus === "CLOSED";
+    if (st === "AUTHORIZED" || st === "CLOSED") {
+      let captured = st === "CLOSED"; // already captured (e.g. by the webhook)
+      if (st === "AUTHORIZED") {
+        const cap = await capturePayment(paymentId, booking.price_total_fils || 0);
+        captured = cap.ok || cap.paymentStatus === "CLOSED";
+        if (!captured) {
+          // Possible concurrent capture by the webhook — re-check.
+          const recheck = await retrievePayment(paymentId);
+          captured = recheck.paymentStatus === "CLOSED";
+        }
+      }
+      if (!captured) {
+        await supabaseAdmin.from("error_log").insert({
+          flow_name: "tabby_capture",
+          error_message: `Tabby payment ${paymentId} not captured (status=${st ?? "unknown"})`,
+          payload: { booking_id: bookingId, payment_id: paymentId },
+        } as never);
+        return redirect("/book?payment_failed=1");
+      }
+      await confirmPaidBooking({
+        bookingId,
+        slotStart: booking.slot_start,
+        address: booking.address || "",
+        provider: "tabby",
+        paymentRef: paymentId,
+        sessionId,
+        isTest: booking.is_test_data,
+        fallbackName,
+        fallbackPhone,
+        fallbackEmail,
+      });
+      return redirect(`/book/success?booking_id=${bookingId}`);
     }
+
+    if (st === "REJECTED") {
+      await markStatus("payment_failed");
+      return redirect("/book?payment_failed=1");
+    }
+    if (st === "EXPIRED") {
+      await releaseLock();
+      await markStatus("expired");
+      return redirect("/book?cancelled=1");
+    }
+    // CREATED / unknown → payment not in a terminal state yet. Make NO state
+    // change (the webhook is the backstop) and just land the customer.
   }
 
-  if (!captured) {
-    await supabaseAdmin.from("error_log").insert({
-      flow_name: "tabby_capture",
-      error_message: `Tabby payment ${paymentId} not captured (status=${retrieved.paymentStatus ?? "unknown"})`,
-      payload: { booking_id: bookingId, payment_id: paymentId },
-    } as never);
-    return redirect("/book?payment_failed=1");
-  }
-
-  await confirmPaidBooking({
-    bookingId,
-    slotStart: booking.slot_start,
-    address: booking.address || "",
-    provider: "tabby",
-    paymentRef: paymentId,
-    sessionId,
-    isTest: booking.is_test_data,
-    fallbackName,
-    fallbackPhone,
-    fallbackEmail,
-  });
-
-  return redirect(`/book/success?booking_id=${bookingId}`);
+  // No payment id, or Tabby status not terminal: choose the landing page from
+  // the (untrusted) result hint, but change nothing.
+  if (result === "success") return redirect(`/book/success?booking_id=${bookingId}`);
+  if (result === "failure") return redirect("/book?payment_failed=1");
+  return redirect("/book?cancelled=1");
 }

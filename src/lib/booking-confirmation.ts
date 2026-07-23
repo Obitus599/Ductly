@@ -273,15 +273,33 @@ export async function confirmPaidBooking(
     });
   }
 
-  // Notify the owners (Mattia + Ashwini) of the new booking.
-  fireOpsAlert("new_booking", {
-    bookingId,
-    customerName: fallbackName || fallbackEmail || "",
-    customerPhone: fallbackPhone || "",
-    slotStart,
-    address: address || "",
-    source: provider === "tabby" ? "online_booking_tabby" : "online_booking",
-  });
+  // Notify the owners (Mattia + Ashwini) of the new booking. The plan · price
+  // context line matches the prior Stripe behavior; only fetched when the
+  // alert channel is live, so dormant installs incur no extra query.
+  const opsUrl = process.env.N8N_WEBHOOK_OPS_ALERT;
+  if (opsUrl) {
+    const { data: alertRow } = await supabase
+      .from("bookings")
+      .select("plan, price_net_fils")
+      .eq("id", bookingId)
+      .returns<{ plan: string | null; price_net_fils: number | null }[]>()
+      .maybeSingle();
+    const extra = [
+      alertRow?.plan,
+      alertRow?.price_net_fils ? `AED ${Math.round(alertRow.price_net_fils / 100)}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    fireOpsAlert("new_booking", {
+      bookingId,
+      customerName: fallbackName || fallbackEmail || "",
+      customerPhone: fallbackPhone || "",
+      slotStart,
+      address: address || "",
+      extra,
+      source: provider === "tabby" ? "online_booking_tabby" : "online_booking",
+    });
+  }
 
   return { confirmed: true, teamId: assignedTeamId };
 }
