@@ -21,12 +21,20 @@ interface BookingDetails {
 function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
+  const bookingId = searchParams.get("booking_id");
   const [details, setDetails] = useState<BookingDetails | null>(null);
 
   useEffect(() => {
-    if (!sessionId) return;
+    // Stripe returns with a session_id; Tabby (and other DB-backed
+    // providers) return with a booking_id.
+    const query = sessionId
+      ? `session_id=${encodeURIComponent(sessionId)}`
+      : bookingId
+      ? `booking_id=${encodeURIComponent(bookingId)}`
+      : null;
+    if (!query) return;
 
-    fetch(`/api/booking-details?session_id=${sessionId}`)
+    fetch(`/api/booking-details?${query}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data) setDetails(data);
@@ -35,7 +43,7 @@ function SuccessContent() {
 
     // Clear booking session
     try { sessionStorage.removeItem("ductly_booking_session"); } catch {}
-  }, [sessionId]);
+  }, [sessionId, bookingId]);
 
   function formatDate(iso: string) {
     const d = new Date(iso);

@@ -90,6 +90,8 @@ function BookingFlow() {
   // Phone verification is gated separately — it rides on WhatsApp (Meta
   // template approval) while email always works. Off until that's ready.
   const phoneVerificationEnabled = process.env.NEXT_PUBLIC_REQUIRE_PHONE_VERIFICATION === "true";
+  const enableTabby = process.env.NEXT_PUBLIC_ENABLE_TABBY === "true";
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "tabby">("card");
   const [propertyType, setPropertyType] = useState<"villa" | "apartment" | "office">("apartment");
   const [bedrooms, setBedrooms] = useState(1);
   const [thermostats, setThermostats] = useState(1);
@@ -313,10 +315,17 @@ function BookingFlow() {
           property_type: propertyType, bedrooms, thermostats, ducts: thermostats,
           plan: planKey, slot_start: slotStart, slot_end: slotEnd, session_id: sessionId,
           consent_version: CURRENT_CONSENT_VERSION,
+          payment_method: enableTabby ? paymentMethod : "card",
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Checkout failed."); setSubmitting(false); return; }
+      if (!res.ok) {
+        // Tabby declined this order → drop back to card so the customer can retry.
+        if (data.fallback === "card") setPaymentMethod("card");
+        setError(data.error || "Checkout failed.");
+        setSubmitting(false);
+        return;
+      }
       window.location.href = data.checkout_url;
     } catch {
       setError("Checkout failed. Please try again.");
@@ -414,6 +423,8 @@ function BookingFlow() {
           consentChecked={consentChecked} setConsentChecked={setConsentChecked}
           onBack={() => { releaseLock(); setStep("calendar"); }}
           onCheckout={handleCheckout}
+          enableTabby={enableTabby}
+          paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
         />
       )}
     </div>
