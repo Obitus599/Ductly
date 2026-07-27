@@ -19,6 +19,8 @@ interface CreateBookingBody {
   customer_phone: string;
   address: string;
   address_details?: Record<string, unknown>;
+  property_type?: string;
+  bedrooms?: number;
   slot_start: string;
   plan: string;
   thermostats?: number;
@@ -51,6 +53,8 @@ export async function POST(request: NextRequest) {
     customer_phone,
     address,
     address_details,
+    property_type,
+    bedrooms,
     slot_start,
     plan,
     thermostats,
@@ -69,6 +73,14 @@ export async function POST(request: NextRequest) {
   if (!planCfg) {
     return NextResponse.json(
       { error: "Invalid plan. Must be essential, signature, or elite." },
+      { status: 400 }
+    );
+  }
+
+  // Validate property_type (optional but must be valid if provided)
+  if (property_type && !["villa", "apartment", "office"].includes(property_type)) {
+    return NextResponse.json(
+      { error: "Invalid property_type. Must be villa, apartment, or office." },
       { status: 400 }
     );
   }
@@ -242,6 +254,8 @@ export async function POST(request: NextRequest) {
     currency: "aed",
   };
   if (address_details) bookingPayload.address_details = address_details;
+  if (property_type) bookingPayload.property_type = property_type;
+  if (bedrooms !== undefined) bookingPayload.bedrooms = bedrooms;
   if (notes) bookingPayload.notes = notes;
 
   const { data: booking, error: bookingError } = await supabase
@@ -345,5 +359,6 @@ export async function POST(request: NextRequest) {
     plan,
     thermostats: thermostatCount,
     job_duration_mins: jobDurationMins,
+    manage_token: manageToken,
   });
 }

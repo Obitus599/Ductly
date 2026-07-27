@@ -394,10 +394,10 @@ export default function BookingDetailPage() {
               </p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-[11px] px-3 py-2 rounded-[8px] bg-[rgb(247,248,250)] truncate" style={{ color: "rgb(100,105,115)" }}>
-                  /manage/{booking.manage_token}
+                  /my-booking/manage?token={booking.manage_token}
                 </code>
                 <button
-                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}/manage/${booking.manage_token}`)}
+                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}/my-booking/manage?token=${booking.manage_token}`)}
                   className="shrink-0 px-3 py-2 text-[12px] font-medium rounded-[8px] transition-colors hover:opacity-80"
                   style={{ fontFamily: "var(--font-cta)", background: "rgb(247,248,250)", color: "rgb(80,160,160)" }}
                 >

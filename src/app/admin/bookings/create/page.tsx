@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import AddressPicker, { EMPTY_ADDRESS, type AddressDetails } from "@/app/book/AddressPicker";
+import { PLAN_OPTIONS } from "@/lib/pricing";
 
 const CARD: React.CSSProperties = {
   background: "white",
@@ -14,8 +16,6 @@ const INPUT =
 
 const LABEL = "block text-[13px] font-medium text-[rgb(80,85,95)] mb-1.5";
 
-import { PLAN_OPTIONS } from "@/lib/pricing";
-
 interface SlotResponse {
   slots: string[];
   total_teams: number;
@@ -27,7 +27,9 @@ export default function CreateBookingPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
+  const [addressDetails, setAddressDetails] = useState<AddressDetails>(EMPTY_ADDRESS);
+  const [propertyType, setPropertyType] = useState("villa");
+  const [bedrooms, setBedrooms] = useState(3);
   const [notes, setNotes] = useState("");
   const [date, setDate] = useState("");
   const [selectedSlot, setSelectedSlot] = useState("");
@@ -37,7 +39,7 @@ export default function CreateBookingPage() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState<{ booking_id: string; team_id: string | null } | null>(null);
+  const [success, setSuccess] = useState<{ booking_id: string; team_id: string | null; manage_token: string } | null>(null);
 
   const selectedPlan = PLAN_OPTIONS.find((p) => p.key === planKey) ?? PLAN_OPTIONS[0];
   const jobDurationMins = useMemo(
@@ -52,7 +54,7 @@ export default function CreateBookingPage() {
     setSelectedSlot("");
     try {
       const params = new URLSearchParams({ date, job_duration_mins: String(jobDurationMins) });
-      if (address.trim()) params.set("address", address.trim());
+      if (addressDetails.formatted_address.trim()) params.set("address", addressDetails.formatted_address.trim());
       const res = await fetch(`/api/slots?${params}`);
       if (!res.ok) {
         setSlots([]);
@@ -65,7 +67,7 @@ export default function CreateBookingPage() {
     } finally {
       setLoadingSlots(false);
     }
-  }, [date, jobDurationMins, address]);
+  }, [date, jobDurationMins, addressDetails.formatted_address]);
 
   useEffect(() => {
     if (date) fetchSlots();
@@ -94,7 +96,10 @@ export default function CreateBookingPage() {
           customer_name: name,
           customer_email: email || undefined,
           customer_phone: phone,
-          address,
+          address: addressDetails.formatted_address,
+          address_details: addressDetails,
+          property_type: propertyType,
+          bedrooms: propertyType === "office" ? 0 : bedrooms,
           slot_start: slotStart,
           plan: planKey,
           thermostats,
@@ -108,7 +113,7 @@ export default function CreateBookingPage() {
         return;
       }
 
-      setSuccess({ booking_id: data.booking_id, team_id: data.team_id });
+      setSuccess({ booking_id: data.booking_id, team_id: data.team_id, manage_token: data.manage_token });
     } catch {
       setError("Network error. Please check your connection and try again.");
     } finally {
@@ -116,7 +121,7 @@ export default function CreateBookingPage() {
     }
   }
 
-  const valid = name.trim() && phone.trim() && address.trim() && date && selectedSlot;
+  const valid = name.trim() && phone.trim() && addressDetails.formatted_address.trim() && date && selectedSlot;
 
   if (success) {
     return (
@@ -139,9 +144,35 @@ export default function CreateBookingPage() {
         <p className="text-[14px] mb-1" style={{ fontFamily: "var(--font-body)", color: "rgb(120,125,135)" }}>
           Team assigned: {success.team_id ? success.team_id.slice(0, 8) : "None"}
         </p>
-        <p className="text-[12px] font-mono mb-6" style={{ color: "rgb(180,185,195)" }}>
+        <p className="text-[12px] font-mono mb-4" style={{ color: "rgb(180,185,195)" }}>
           {success.booking_id}
         </p>
+        {success.manage_token && (
+          <div className="mb-5 text-left p-4 rounded-[10px]" style={{ background: "rgb(247,248,250)" }}>
+            <p className="text-[12px] mb-2" style={{ fontFamily: "var(--font-body)", color: "rgb(130,135,145)" }}>
+              Share this link with the customer to manage their booking:
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-[11px] px-3 py-2 rounded-[8px] bg-white truncate" style={{ color: "rgb(100,105,115)" }}>
+                /my-booking/manage?token={success.manage_token}
+              </code>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/my-booking/manage?token=${success.manage_token}`);
+                  const btn = document.activeElement as HTMLButtonElement;
+                  const orig = btn.textContent;
+                  btn.textContent = "Copied!";
+                  setTimeout(() => { btn.textContent = orig; }, 1500);
+                }}
+                className="shrink-0 px-3 py-2 text-[12px] font-medium rounded-[8px] transition-colors hover:opacity-80"
+                style={{ fontFamily: "var(--font-cta)", background: "rgb(147,216,216)", color: "white" }}
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex gap-3 justify-center">
           <button
             type="button"
@@ -161,7 +192,9 @@ export default function CreateBookingPage() {
               setName("");
               setEmail("");
               setPhone("");
-              setAddress("");
+              setAddressDetails(EMPTY_ADDRESS);
+              setPropertyType("villa");
+              setBedrooms(3);
               setNotes("");
               setDate("");
               setSelectedSlot("");
@@ -223,10 +256,52 @@ export default function CreateBookingPage() {
 
         <hr style={{ borderColor: "rgb(245,246,248)" }} />
 
-        {/* Address */}
+        {/* Address — Google Maps picker */}
         <div>
-          <label className={LABEL} style={{ fontFamily: "var(--font-body)" }}>Address *</label>
-          <input className={INPUT} style={{ fontFamily: "var(--font-body)" }} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full address" />
+          <p className="text-[14px] font-medium mb-3" style={{ fontFamily: "var(--font-body)", color: "rgb(61,61,61)" }}>
+            Address *
+          </p>
+          <AddressPicker value={addressDetails} onChange={setAddressDetails} />
+        </div>
+
+        <hr style={{ borderColor: "rgb(245,246,248)" }} />
+
+        {/* Property Details */}
+        <div>
+          <p className="text-[14px] font-medium mb-3" style={{ fontFamily: "var(--font-body)", color: "rgb(61,61,61)" }}>
+            Property Details
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL} style={{ fontFamily: "var(--font-body)" }}>Property Type</label>
+              <select
+                className={INPUT}
+                style={{ fontFamily: "var(--font-body)" }}
+                value={propertyType}
+                onChange={(e) => setPropertyType(e.target.value)}
+              >
+                <option value="villa">Villa</option>
+                <option value="apartment">Apartment</option>
+                <option value="office">Office</option>
+              </select>
+            </div>
+            {propertyType !== "office" && (
+              <div>
+                <label className={LABEL} style={{ fontFamily: "var(--font-body)" }}>Bedrooms</label>
+                <select
+                  className={INPUT}
+                  style={{ fontFamily: "var(--font-body)" }}
+                  value={bedrooms}
+                  onChange={(e) => setBedrooms(Number(e.target.value))}
+                >
+                  <option value={0}>Studio</option>
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <option key={n} value={n}>{n} bedroom{n > 1 ? "s" : ""}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
 
         <hr style={{ borderColor: "rgb(245,246,248)" }} />

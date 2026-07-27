@@ -19,13 +19,24 @@ export async function GET(request: NextRequest) {
   return handle(request);
 }
 
+function resolvedBaseUrl(request: NextRequest): string {
+  const proto = request.headers.get("x-forwarded-proto") || "https";
+  const host =
+    request.headers.get("x-forwarded-host") ||
+    request.headers.get("host") ||
+    "";
+  if (host) return `${proto}://${host}`;
+  return process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+}
+
 async function handle(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const bookingId = params.get("booking_id");
   const sessionId = params.get("session_id") || undefined;
   const result = params.get("result") || "success";
 
-  const redirect = (path: string) => NextResponse.redirect(new URL(path, request.url));
+  const redirect = (path: string) =>
+    NextResponse.redirect(new URL(path, resolvedBaseUrl(request)));
 
   if (!bookingId) return redirect("/book");
   if (!tabbyConfigured()) return redirect("/book?payment_failed=1");
