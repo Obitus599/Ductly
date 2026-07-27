@@ -8,6 +8,7 @@ import { isContactVerified, normalizeIdentifier } from "@/lib/verification";
 import { isUaeMobile } from "@/lib/phone-uae";
 import { PLANS, calcJobDuration } from "@/lib/pricing";
 import type { PlanTier } from "@/lib/pricing";
+import { tabbyConfigured, createCheckoutSession, formatTabbyAmount } from "@/lib/tabby";
 
 const PLAN_CONFIG = PLANS;
 
@@ -43,7 +44,11 @@ export async function POST(request: NextRequest) {
       slot_start,
       session_id,
       consent_version,
+      payment_method,
     } = body;
+
+    // Which rail: card (Stripe, default) or Tabby BNPL.
+    const useTabby = payment_method === "tabby";
 
     // Validate required fields
     if (
@@ -246,6 +251,7 @@ export async function POST(request: NextRequest) {
         address_details: address_details || null,
         status: "pending",
         is_test_data: testMode,
+        payment_provider: useTabby ? "tabby" : "stripe",
         // Financial snapshot for the FTA tax invoice — persisted here so
         // the invoice never has to recompute or read back from Stripe.
         plan: planKey,
@@ -266,6 +272,91 @@ export async function POST(request: NextRequest) {
         { error: "Failed to create booking." },
         { status: 500 }
       );
+    }
+
+    // 3b. Tabby (BNPL) branch — create a Tabby hosted-checkout session and
+    //     redirect there instead of Stripe. Same pending booking; the
+    //     provider that confirms it is recorded on the row.
+    if (useTabby) {
+      if (!tabbyConfigured()) {
+        await supabaseAdmin
+          .from("bookings")
+          .update({ status: "failed" } as never)
+          .eq("id", booking.id);
+        return NextResponse.json(
+          { error: "Tabby is not available right now. Please pay by card." },
+          { status: 503 }
+        );
+      }
+
+      const planName = planKey.charAt(0).toUpperCase() + planKey.slice(1);
+      const session = await createCheckoutSession({
+        bookingId: booking.id,
+        amountFils: vat.totalFils,
+        currency: "AED",
+        description: `Ductly duct cleaning — ${planName} Plan`,
+        buyer: { name: customer_name, email: emailNorm, phone: phoneNorm },
+        items: [
+          {
+            title: `Duct Cleaning — ${planName} Plan`,
+            quantity: 1,
+            unit_price: formatTabbyAmount(vat.totalFils),
+            category: "Home Services",
+          },
+        ],
+        merchantUrls: {
+          success: `${appUrl}/api/tabby/callback?booking_id=${booking.id}&session_id=${encodeURIComponent(session_id)}&result=success`,
+          cancel: `${appUrl}/api/tabby/callback?booking_id=${booking.id}&session_id=${encodeURIComponent(session_id)}&result=cancel`,
+          failure: `${appUrl}/api/tabby/callback?booking_id=${booking.id}&session_id=${encodeURIComponent(session_id)}&result=failure`,
+        },
+      });
+
+      if (!session.ok) {
+        await supabaseAdmin
+          .from("bookings")
+          .update({ status: "failed" } as never)
+          .eq("id", booking.id);
+        return NextResponse.json(
+          { error: "Could not start the Tabby payment. Please pay by card." },
+          { status: 502 }
+        );
+      }
+
+      if (!session.eligible || !session.webUrl) {
+        // Customer isn't eligible for Tabby on this order — tell the client
+        // to fall back to card. Leave the booking failed so the slot frees.
+        await supabaseAdmin
+          .from("bookings")
+          .update({ status: "failed" } as never)
+          .eq("id", booking.id);
+        return NextResponse.json(
+          {
+            error:
+              "Tabby isn't available for this order. Please pay by card instead.",
+            eligible: false,
+            fallback: "card",
+            rejection_reason: session.rejectionReason ?? null,
+          },
+          { status: 422 }
+        );
+      }
+
+      // Store the Tabby payment id so the return handler + webhook can
+      // locate this booking.
+      await supabaseAdmin
+        .from("bookings")
+        .update({ tabby_payment_id: session.paymentId } as never)
+        .eq("id", booking.id);
+
+      return NextResponse.json({
+        checkout_url: session.webUrl,
+        provider: "tabby",
+        booking_id: booking.id,
+        price_aed: priceAED,
+        price_net_fils: vat.netFils,
+        price_vat_fils: vat.vatFils,
+        price_total_fils: vat.totalFils,
+      });
     }
 
     // 4. Build Stripe line item description

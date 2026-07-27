@@ -21,12 +21,17 @@ interface CheckoutStepProps {
   setConsentChecked: (v: boolean) => void;
   onBack: () => void;
   onCheckout: () => void;
+  /** Show the Tabby BNPL option (NEXT_PUBLIC_ENABLE_TABBY). */
+  enableTabby: boolean;
+  paymentMethod: "card" | "tabby";
+  setPaymentMethod: (v: "card" | "tabby") => void;
 }
 
 export default function CheckoutStep({
   plan, name, email, phone, address, propertyLabel, bedroomLabel,
   thermostats, selectedDate, selectedSlot, lockCountdown, hasLock,
   submitting, consentChecked, setConsentChecked, onBack, onCheckout,
+  enableTabby, paymentMethod, setPaymentMethod,
 }: CheckoutStepProps) {
   return (
     <div className="p-7 md:p-10" style={CARD}>
@@ -122,6 +127,43 @@ export default function CheckoutStep({
         </span>
       </label>
 
+      {/* Payment method (Tabby BNPL is flag-gated) */}
+      {enableTabby && (
+        <div className="mb-5">
+          <p
+            className="text-[13px] font-medium mb-2 text-[rgb(130,135,145)]"
+            style={{ fontFamily: "var(--font-body)" }}
+          >
+            Payment method
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { id: "card", title: "Card", sub: "Pay in full" },
+              { id: "tabby", title: "Tabby", sub: "4 interest-free payments" },
+            ] as const).map((opt) => {
+              const active = paymentMethod === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setPaymentMethod(opt.id)}
+                  aria-pressed={active}
+                  className="text-left rounded-[12px] border-2 p-3 transition-colors"
+                  style={{
+                    borderColor: active ? "rgb(147,216,216)" : "rgb(230,230,230)",
+                    background: active ? "rgb(240,252,252)" : "white",
+                    fontFamily: "var(--font-body)",
+                  }}
+                >
+                  <div className="text-[15px] font-medium text-[rgb(61,61,61)]">{opt.title}</div>
+                  <div className="text-[12px] text-[rgb(140,140,140)]">{opt.sub}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex gap-3">
         <button
@@ -136,7 +178,11 @@ export default function CheckoutStep({
           className="flex-1 px-6 py-4 text-[16px] text-white hover:brightness-110 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           style={CTA}
         >
-          {submitting ? "Redirecting to payment..." : "Proceed to Payment"}
+          {submitting
+            ? "Redirecting to payment..."
+            : enableTabby && paymentMethod === "tabby"
+            ? "Continue with Tabby"
+            : "Proceed to Payment"}
         </button>
       </div>
     </div>

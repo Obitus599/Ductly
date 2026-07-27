@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
+import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { vatFromGross } from "@/lib/vat";
 
 /**
- * GET /api/booking-details?session_id=cs_xxx
+ * GET /api/booking-details?session_id=cs_xxx  (Stripe)
+ *              or          ?booking_id=<uuid>  (DB-backed, e.g. Tabby)
  *
- * Retrieves booking details from a completed Stripe Checkout Session.
- * Used by the success page to display confirmation info.
+ * Retrieves booking details for the success page. The Stripe path reads
+ * the Checkout Session; the booking_id path reads the confirmed booking
+ * straight from the DB (Tabby has no Stripe session).
  */
 export async function GET(request: NextRequest) {
   const clientIp =
@@ -18,6 +21,51 @@ export async function GET(request: NextRequest) {
       { error: "Too many requests." },
       { status: 429 }
     );
+  }
+
+  // DB-backed path (Tabby and any non-Stripe provider): look the confirmed
+  // booking up directly. Only confirmed bookings are exposed.
+  const bookingId = request.nextUrl.searchParams.get("booking_id");
+  if (bookingId) {
+    const { data: booking } = await supabaseAdmin
+      .from("bookings")
+      .select(
+        "status, plan, address, slot_start, thermostats, price_net_fils, price_vat_fils, price_total_fils"
+      )
+      .eq("id", bookingId)
+      .returns<
+        {
+          status: string;
+          plan: string | null;
+          address: string | null;
+          slot_start: string | null;
+          thermostats: number | null;
+          price_net_fils: number | null;
+          price_vat_fils: number | null;
+          price_total_fils: number | null;
+        }[]
+      >()
+      .maybeSingle();
+
+    if (!booking || booking.status !== "confirmed") {
+      return NextResponse.json(
+        { error: "Booking not found or not yet confirmed." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      plan: booking.plan || "signature",
+      address: booking.address || "",
+      slot_start: booking.slot_start || "",
+      property_type: "",
+      bedrooms: "0",
+      thermostats: String(booking.thermostats ?? 1),
+      price_aed: String(Math.round((booking.price_net_fils || 0) / 100)),
+      price_net_fils: booking.price_net_fils || 0,
+      price_vat_fils: booking.price_vat_fils || 0,
+      price_total_fils: booking.price_total_fils || 0,
+    });
   }
 
   const sessionId = request.nextUrl.searchParams.get("session_id");
