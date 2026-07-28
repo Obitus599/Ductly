@@ -1,9 +1,11 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { fireN8nWebhook } from "@/lib/n8n";
 import { fireOpsAlert } from "@/lib/ops-alert";
+import { issueCancellationRefund, refundMessage } from "@/lib/refund";
 
 const CANCELLATION_WINDOW_HOURS = 24;
 
@@ -19,7 +21,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getClientIp(request);
   const rl = await checkRateLimit(`cancel:${clientIp}`, 5, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many attempts." }, { status: 429 });
@@ -44,9 +46,9 @@ export async function POST(
   // 1. Fetch the booking
   const { data: booking, error: fetchError } = await supabase
     .from("bookings")
-    .select("id, status, slot_start, payment_intent_id, team_id, customer_id")
+    .select("id, status, slot_start, payment_intent_id, payment_provider, tabby_payment_id, price_total_fils, team_id, customer_id")
     .eq("manage_token", token)
-    .returns<{ id: string; status: string; slot_start: string; payment_intent_id: string | null; team_id: string | null; customer_id: string }[]>()
+    .returns<{ id: string; status: string; slot_start: string; payment_intent_id: string | null; payment_provider: string | null; tabby_payment_id: string | null; price_total_fils: number | null; team_id: string | null; customer_id: string }[]>()
     .single();
 
   if (fetchError || !booking) {
@@ -98,34 +100,45 @@ export async function POST(
     );
   }
 
-  // 5. Now that we own the cancellation, issue the Stripe refund.
-  let refundId: string | null = null;
-  let refundStatus: string = "pending";
+  // 7. Fetch the customer once for both the refund escalation context and
+  //    the customer-facing + internal notifications.
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("name, phone, email")
+    .eq("id", booking.customer_id)
+    .returns<{ name: string; phone: string; email: string }[]>()
+    .single();
 
-  if (booking.payment_intent_id) {
-    try {
-      const refund = await stripe.refunds.create({
-        payment_intent: booking.payment_intent_id,
-      });
-      refundId = refund.id;
-      refundStatus = refund.status ?? "succeeded";
-    } catch (err) {
-      console.error("Stripe refund failed:", err);
-      // Log but don't block cancellation — admin can handle manually
-      await supabase.from("error_log").insert({
-        flow_name: "customer_cancellation_refund",
-        error_message: err instanceof Error ? err.message : "Refund failed",
-        payload: { booking_id: booking.id, payment_intent_id: booking.payment_intent_id },
-      } as never);
-      refundStatus = "failed";
-    }
-  }
+  // 5. Now that we own the cancellation, issue the refund through the
+  //    RIGHT provider (Stripe card OR Tabby BNPL). A Tabby booking has no
+  //    payment_intent_id, so the old Stripe-only block silently skipped it
+  //    and reported a phantom "pending" refund.
+  const refund = await issueCancellationRefund({
+    bookingId: booking.id,
+    paymentProvider: booking.payment_provider,
+    paymentIntentId: booking.payment_intent_id,
+    tabbyPaymentId: booking.tabby_payment_id,
+    amountFils: booking.price_total_fils,
+    reason,
+    triggeredBy: "customer",
+    customerName: customer?.name,
+    customerPhone: customer?.phone,
+    slotStart: booking.slot_start,
+  });
 
-  // 5b. Record the refund outcome on the (already-cancelled) booking.
+  // 5b. Record the refund outcome on the (already-cancelled) booking, and
+  //     ROTATE the manage_token so this now-defunct link stops being a live
+  //     key to the account (defence for the leaked/stale-token risk).
+  const rotatedToken = `bk_${crypto.randomBytes(24).toString("hex")}`;
   await supabase
     .from("bookings")
-    .update({ refund_id: refundId, refund_status: refundStatus } as never)
+    .update({
+      refund_id: refund.refundId,
+      ...(refund.refundStatus ? { refund_status: refund.refundStatus } : {}),
+      manage_token: rotatedToken,
+    } as never)
     .eq("id", booking.id);
+  const refundStatus = refund.refundStatus ?? "not_applicable";
 
   // 6. Release the slot lock so the slot becomes available again
   if (booking.team_id) {
@@ -134,15 +147,6 @@ export async function POST(
       .delete()
       .eq("booking_id", booking.id);
   }
-
-  // 7. Fetch the customer once for both the customer-facing
-  //    cancellation notice and the internal ops alert.
-  const { data: customer } = await supabase
-    .from("customers")
-    .select("name, phone, email")
-    .eq("id", booking.customer_id)
-    .returns<{ name: string; phone: string; email: string }[]>()
-    .single();
 
   // 7a. Trigger n8n cancellation notification (customer-facing)
   const n8nCancelUrl = process.env.N8N_WEBHOOK_BOOKING_CANCELLED;
@@ -174,10 +178,8 @@ export async function POST(
   return NextResponse.json({
     success: true,
     booking_id: booking.id,
-    refund_id: refundId,
+    refund_id: refund.refundId,
     refund_status: refundStatus,
-    message: refundStatus === "failed"
-      ? "Booking cancelled. Refund could not be processed automatically — our team will follow up."
-      : "Booking cancelled. Your refund will appear within 5-10 business days.",
+    message: refundMessage(refund),
   });
 }

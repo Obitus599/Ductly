@@ -190,6 +190,52 @@ export async function retrievePayment(paymentId: string): Promise<PaymentResult>
 }
 
 /**
+ * Refund a CLOSED (captured) Tabby payment, fully or partially.
+ *
+ * Tabby has no Stripe-style payment_intent, so cancellation refunds for a
+ * BNPL booking MUST go through this, not stripe.refunds.create. Returns
+ * ok:false with the HTTP status/message on failure so the caller can
+ * record a manual-refund-required state rather than silently reporting a
+ * refund that never happened.
+ *
+ * Docs: POST /api/v2/payments/{id}/refunds  { amount, reason }
+ */
+export async function refundPayment(
+  paymentId: string,
+  amountFils: number,
+  reason = "customer_cancellation"
+): Promise<PaymentResult> {
+  if (!tabbyConfigured()) {
+    return { ok: false, errorMessage: "Tabby not configured." };
+  }
+  try {
+    const res = await fetch(
+      `${BASE_URL}/api/v2/payments/${encodeURIComponent(paymentId)}/refunds`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: authHeader(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ amount: formatTabbyAmount(amountFils), reason }),
+        signal: AbortSignal.timeout(15_000),
+      }
+    );
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        errorMessage: (json as { error?: string }).error ?? "Tabby refund failed.",
+      };
+    }
+    return { ok: true, paymentStatus: json.status as string | undefined };
+  } catch (err) {
+    return { ok: false, errorMessage: err instanceof Error ? err.message : "Tabby refund failed." };
+  }
+}
+
+/**
  * Capture an AUTHORIZED payment (full amount) to settle it. A successful
  * capture moves the payment to CLOSED. Capturing a non-AUTHORIZED payment
  * returns a 400 from Tabby — callers should retrieve first.

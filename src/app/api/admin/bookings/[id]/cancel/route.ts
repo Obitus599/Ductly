@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { requireAdmin, requireSameOrigin } from "@/lib/admin-auth";
 import { fireN8nWebhook } from "@/lib/n8n";
 import { fireOpsAlert } from "@/lib/ops-alert";
+import { issueCancellationRefund } from "@/lib/refund";
 
 /**
  * POST /api/admin/bookings/[id]/cancel
@@ -36,9 +36,9 @@ export async function POST(
   // 1. Fetch booking
   const { data: booking, error } = await supabase
     .from("bookings")
-    .select("id, status, payment_intent_id, team_id, customer_id, slot_start")
+    .select("id, status, payment_intent_id, payment_provider, tabby_payment_id, price_total_fils, team_id, customer_id, slot_start")
     .eq("id", id)
-    .returns<{ id: string; status: string; payment_intent_id: string | null; team_id: string | null; customer_id: string; slot_start: string }[]>()
+    .returns<{ id: string; status: string; payment_intent_id: string | null; payment_provider: string | null; tabby_payment_id: string | null; price_total_fils: number | null; team_id: string | null; customer_id: string; slot_start: string }[]>()
     .single();
 
   if (error || !booking) {
@@ -78,29 +78,46 @@ export async function POST(
     );
   }
 
-  // 3. Now that we own the cancellation, issue the refund if requested.
-  let refundId: string | null = null;
-  let refundStatus = "pending";
+  // 5. Fetch the customer once for refund escalation + notifications.
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("name, phone, email")
+    .eq("id", booking.customer_id)
+    .returns<{ name: string; phone: string; email: string }[]>()
+    .single();
 
-  if (issueRefund && booking.payment_intent_id) {
-    try {
-      const refund = await stripe.refunds.create({
-        payment_intent: booking.payment_intent_id,
-      });
-      refundId = refund.id;
-      refundStatus = refund.status ?? "succeeded";
-    } catch (err) {
-      console.error("Admin refund failed:", err);
-      refundStatus = "failed";
-    }
+  // 3. Now that we own the cancellation, issue the refund if requested,
+  //    through the correct provider (Stripe OR Tabby). The old code only
+  //    ever called Stripe, so `issue_refund:true` on a Tabby booking (the
+  //    admin UI default) silently no-op'd and recorded a phantom "pending".
+  let refundId: string | null = null;
+  let refundStatus: string | null = null;
+
+  if (issueRefund) {
+    const refund = await issueCancellationRefund({
+      bookingId: booking.id,
+      paymentProvider: booking.payment_provider,
+      paymentIntentId: booking.payment_intent_id,
+      tabbyPaymentId: booking.tabby_payment_id,
+      amountFils: booking.price_total_fils,
+      reason,
+      triggeredBy: "admin",
+      customerName: customer?.name,
+      customerPhone: customer?.phone,
+      slotStart: booking.slot_start,
+    });
+    refundId = refund.refundId;
+    refundStatus = refund.refundStatus;
   }
 
-  // 3b. Record the refund outcome on the (already-cancelled) booking.
+  // 3b. Record the refund outcome on the (already-cancelled) booking. Only
+  //     persist a status when a refund was actually attempted and returned
+  //     one (the CHECK constraint allows pending/succeeded/failed).
   await supabase
     .from("bookings")
     .update({
       refund_id: refundId,
-      refund_status: issueRefund ? refundStatus : null,
+      ...(refundStatus ? { refund_status: refundStatus } : {}),
     } as never)
     .eq("id", id);
 
@@ -111,14 +128,6 @@ export async function POST(
       .delete()
       .eq("booking_id", id);
   }
-
-  // 5. Fetch the customer once for both notifications.
-  const { data: customer } = await supabase
-    .from("customers")
-    .select("name, phone, email")
-    .eq("id", booking.customer_id)
-    .returns<{ name: string; phone: string; email: string }[]>()
-    .single();
 
   // 5a. Trigger n8n cancellation notification (customer-facing)
   const n8nCancelUrl = process.env.N8N_WEBHOOK_BOOKING_CANCELLED;
@@ -131,7 +140,7 @@ export async function POST(
       customer_email: customer?.email || "",
       slot_start: booking.slot_start,
       reason: reason || "No reason provided",
-      refund_status: issueRefund ? refundStatus : "no_refund",
+      refund_status: issueRefund ? refundStatus ?? "no_payment" : "no_refund",
       cancelled_by: "admin",
     });
   }
@@ -143,7 +152,7 @@ export async function POST(
     customerName: customer?.name || "",
     customerPhone: customer?.phone || "",
     slotStart: booking.slot_start,
-    extra: `By admin · Refund: ${issueRefund ? refundStatus : "no_refund"}${reason ? ` · ${reason}` : ""}`,
+    extra: `By admin · Refund: ${issueRefund ? refundStatus ?? "no_payment" : "no_refund"}${reason ? ` · ${reason}` : ""}`,
     source: "admin_cancellation",
   });
 
