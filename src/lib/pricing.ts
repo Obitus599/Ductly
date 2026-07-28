@@ -5,6 +5,12 @@ export interface PlanConfig {
   setupMins: number;
   perThermostatMins: number;
   tagline: string;
+  /**
+   * What the plan actually includes. Single source of truth: the pricing
+   * cards, the Terms page and the chatbot's knowledge base all read this,
+   * so what a customer is told on the site is what the bot repeats.
+   */
+  features: string[];
 }
 
 export const PLANS: Record<string, PlanConfig> = {
@@ -15,6 +21,12 @@ export const PLANS: Record<string, PlanConfig> = {
     setupMins: 45,
     perThermostatMins: 45,
     tagline: "Basic duct vacuuming. Perfect for light maintenance.",
+    features: [
+      "TurboClean™",
+      "Fan coil unit cleaning",
+      "HEPA vacuuming",
+      "Filter cleaning",
+    ],
   },
   signature: {
     key: "signature",
@@ -23,6 +35,15 @@ export const PLANS: Record<string, PlanConfig> = {
     setupMins: 80,
     perThermostatMins: 45,
     tagline: "Full medical-grade sanitizations and restoration.",
+    features: [
+      "TurboClean™",
+      "Filter cleaning",
+      "Fan coil unit cleaning",
+      "Fumigation",
+      "Bio-enzyme disinfection",
+      "Mold remediation treatment",
+      "Black mold remediation",
+    ],
   },
   elite: {
     key: "elite",
@@ -31,6 +52,17 @@ export const PLANS: Record<string, PlanConfig> = {
     setupMins: 80,
     perThermostatMins: 60,
     tagline: "Ultimate protection with 12-month air purity guarantee.",
+    features: [
+      "TurboClean™",
+      "Filter cleaning",
+      "Fan coil unit cleaning",
+      "Fumigation",
+      "Bio-enzyme disinfection",
+      "Mold remediation treatment",
+      "Black mold remediation",
+      "AC unit coil deep clean",
+      "Air quality analysis",
+    ],
   },
 };
 

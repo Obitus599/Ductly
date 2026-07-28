@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { PLANS } from "@/lib/pricing";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -35,14 +36,17 @@ SERVICES & COVERAGE:
 PLANS & PRICING (all prices in AED per thermostat, exclusive of 5% VAT — VAT is added at checkout):
 1. ${e.label} — ${e.rate} AED/thermostat
    ${e.tagline}
+   Includes: ${e.features.join(", ")}
    Typical job duration: ${e.setupMins + e.perThermostatMins * 4} min
 
 2. ${s.label} — ${s.rate} AED/thermostat (BEST DEAL)
    ${s.tagline}
+   Includes: ${s.features.join(", ")}
    Typical job duration: ${s.setupMins + s.perThermostatMins * 4} min
 
 3. ${el.label} — ${el.rate} AED/thermostat
    ${el.tagline}
+   Includes: ${el.features.join(", ")}
    Typical job duration: ${el.setupMins + el.perThermostatMins * 4} min
 
 BOOKING & PROCESS:
@@ -90,7 +94,7 @@ RESPONSE RULES:
 
 export async function POST(request: NextRequest) {
   const clientIp =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    getClientIp(request);
   const rl = await checkRateLimit(`chat:${clientIp}`, 10, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json(

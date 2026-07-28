@@ -58,7 +58,20 @@ function setupSuccessMocks() {
         }),
       };
     }
-    // Existing bookings (collision check)
+    // Active pre-payment holds (capacity check)
+    if (table === "booking_locks") {
+      return {
+        select: () => ({
+          gte: () => ({
+            lte: () => ({
+              gt: () => ({
+                returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+              }),
+            }),
+          }),
+        }),
+      };
+    }
     if (table === "bookings") {
       // First call: select for collision check, second: insert
       let isSelectCall = true;
@@ -226,6 +239,29 @@ describe("POST /api/admin/bookings/create", () => {
             }),
           };
         }
+        // Active pre-payment holds (capacity check)
+        if (table === "booking_locks") {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: () => ({
+                  gt: () => ({
+                    returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "schedule_blackouts") {
+          return {
+            select: () => ({
+              lt: () => ({
+                gt: () => ({ returns: vi.fn().mockResolvedValue({ data: [], error: null }) }),
+              }),
+            }),
+          };
+        }
         if (table === "bookings") {
           return {
             select: () => ({
@@ -255,7 +291,202 @@ describe("POST /api/admin/bookings/create", () => {
       const res = await POST(makeRequest(VALID_BODY));
       expect(res.status).toBe(409);
       const data = await res.json();
-      expect(data.error).toMatch(/all teams are occupied/i);
+      expect(data.error).toMatch(/occupied or blocked/i);
+    });
+
+    it("returns 409 when occupancy AND blackouts TOGETHER exhaust capacity", async () => {
+      // 2 teams: team-1 is on another job, team-2 is blacked out. Neither
+      // check hit its own threshold on its own (1 of 2 each), so the old
+      // independent tallies let the booking through with no crew free.
+      mockSupabase.from.mockImplementation((table: string) => {
+        if (table === "teams") {
+          return {
+            select: () => ({
+              eq: () => ({
+                returns: vi.fn().mockResolvedValue({
+                  data: [{ id: "team-1" }, { id: "team-2" }],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "booking_locks") {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: () => ({
+                  gt: () => ({ returns: vi.fn().mockResolvedValue({ data: [], error: null }) }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "bookings") {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: () => ({
+                  in: () => ({
+                    returns: vi.fn().mockResolvedValue({
+                      data: [
+                        {
+                          id: "existing-1",
+                          slot_start: "2026-06-01T09:30:00+04:00",
+                          slot_end: "2026-06-01T11:00:00+04:00",
+                          team_id: "team-1",
+                        },
+                      ],
+                      error: null,
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "schedule_blackouts") {
+          return {
+            select: () => ({
+              lt: () => ({
+                gt: () => ({
+                  returns: vi.fn().mockResolvedValue({
+                    data: [{ team_id: "team-2", reason: "Training" }],
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const res = await POST(makeRequest(VALID_BODY));
+      expect(res.status).toBe(409);
+      const data = await res.json();
+      expect(data.error).toMatch(/occupied or blocked/i);
+    });
+
+    it("returns 409 when active booking_locks consume the remaining capacity", async () => {
+      // One team, no bookings — but a customer is mid-checkout holding
+      // the slot. The old guard ignored booking_locks entirely.
+      mockSupabase.from.mockImplementation((table: string) => {
+        if (table === "teams") {
+          return {
+            select: () => ({
+              eq: () => ({
+                returns: vi.fn().mockResolvedValue({ data: [{ id: "team-1" }], error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === "bookings") {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: () => ({
+                  in: () => ({ returns: vi.fn().mockResolvedValue({ data: [], error: null }) }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "booking_locks") {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: () => ({
+                  gt: () => ({
+                    returns: vi.fn().mockResolvedValue({
+                      data: [{ slot_start: "2026-06-01T10:00:00+04:00" }],
+                      error: null,
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "schedule_blackouts") {
+          return {
+            select: () => ({
+              lt: () => ({
+                gt: () => ({ returns: vi.fn().mockResolvedValue({ data: [], error: null }) }),
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const res = await POST(makeRequest(VALID_BODY));
+      expect(res.status).toBe(409);
+      const data = await res.json();
+      expect(data.error).toMatch(/occupied or blocked/i);
+    });
+
+    it("counts an UNASSIGNED pending booking as consuming capacity", async () => {
+      // One team, one pending booking with no team_id yet. The old guard
+      // `continue`d past null team_ids, so it read the day as empty.
+      mockSupabase.from.mockImplementation((table: string) => {
+        if (table === "teams") {
+          return {
+            select: () => ({
+              eq: () => ({
+                returns: vi.fn().mockResolvedValue({ data: [{ id: "team-1" }], error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === "bookings") {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: () => ({
+                  in: () => ({
+                    returns: vi.fn().mockResolvedValue({
+                      data: [
+                        {
+                          id: "pending-1",
+                          slot_start: "2026-06-01T10:00:00+04:00",
+                          slot_end: "2026-06-01T11:30:00+04:00",
+                          team_id: null,
+                        },
+                      ],
+                      error: null,
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "booking_locks") {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: () => ({
+                  gt: () => ({ returns: vi.fn().mockResolvedValue({ data: [], error: null }) }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "schedule_blackouts") {
+          return {
+            select: () => ({
+              lt: () => ({
+                gt: () => ({ returns: vi.fn().mockResolvedValue({ data: [], error: null }) }),
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const res = await POST(makeRequest(VALID_BODY));
+      expect(res.status).toBe(409);
     });
 
     it("returns 409 when a global blackout covers the slot", async () => {
@@ -272,7 +503,21 @@ describe("POST /api/admin/bookings/create", () => {
             }),
           };
         }
-        if (table === "bookings") {
+        // Active pre-payment holds (capacity check)
+        if (table === "booking_locks") {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: () => ({
+                  gt: () => ({
+                    returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+    if (table === "bookings") {
           return {
             select: () => ({
               gte: () => ({
@@ -401,7 +646,21 @@ describe("POST /api/admin/bookings/create", () => {
             }),
           };
         }
-        if (table === "bookings") {
+        // Active pre-payment holds (capacity check)
+        if (table === "booking_locks") {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: () => ({
+                  gt: () => ({
+                    returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+    if (table === "bookings") {
           return {
             select: () => ({
               gte: () => ({
@@ -462,7 +721,21 @@ describe("POST /api/admin/bookings/create", () => {
             }),
           };
         }
-        if (table === "bookings") {
+        // Active pre-payment holds (capacity check)
+        if (table === "booking_locks") {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: () => ({
+                  gt: () => ({
+                    returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+    if (table === "bookings") {
           // Select chain for collision check
           let isSelectCall = true;
           return {

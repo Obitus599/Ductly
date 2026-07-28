@@ -28,7 +28,11 @@ function setupDefaultMocks() {
       return {
         update: () => ({
           eq: () => ({
-            lt: vi.fn().mockResolvedValue({}),
+            lt: () => ({
+              select: () => ({
+                returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+              }),
+            }),
           }),
         }),
         select: () => ({
@@ -100,7 +104,7 @@ describe("GET /api/slots", () => {
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === "bookings") {
         return {
-          update: () => ({ eq: () => ({ lt: vi.fn().mockResolvedValue({}) }) }),
+          update: () => ({ eq: () => ({ lt: () => ({ select: () => ({ returns: vi.fn().mockResolvedValue({ data: [], error: null }) }) }) }) }),
         };
       }
       if (table === "team_schedules") {
@@ -141,7 +145,7 @@ describe("GET /api/slots", () => {
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === "bookings") {
         return {
-          update: () => ({ eq: () => ({ lt: vi.fn().mockResolvedValue({}) }) }),
+          update: () => ({ eq: () => ({ lt: () => ({ select: () => ({ returns: vi.fn().mockResolvedValue({ data: [], error: null }) }) }) }) }),
         };
       }
       if (table === "team_schedules") {
@@ -183,7 +187,7 @@ describe("GET /api/slots", () => {
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === "bookings") {
         return {
-          update: () => ({ eq: () => ({ lt: vi.fn().mockResolvedValue({}) }) }),
+          update: () => ({ eq: () => ({ lt: () => ({ select: () => ({ returns: vi.fn().mockResolvedValue({ data: [], error: null }) }) }) }) }),
           select: () => ({
             gte: () => ({
               lte: () => ({
@@ -255,7 +259,7 @@ describe("GET /api/slots", () => {
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === "bookings") {
         return {
-          update: () => ({ eq: () => ({ lt: vi.fn().mockResolvedValue({}) }) }),
+          update: () => ({ eq: () => ({ lt: () => ({ select: () => ({ returns: vi.fn().mockResolvedValue({ data: [], error: null }) }) }) }) }),
           select: () => ({
             gte: () => ({
               lte: () => ({

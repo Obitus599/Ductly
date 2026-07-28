@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { verifyCode, normalizeIdentifier, type VerifyChannel } from "@/lib/verification";
 
 /**
@@ -10,7 +11,7 @@ import { verifyCode, normalizeIdentifier, type VerifyChannel } from "@/lib/verif
  * verified:false + reason), not an error.
  */
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = getClientIp(request);
   const rl = await checkRateLimit(`verify-check:${ip}`, 15, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many attempts. Please wait." }, { status: 429 });

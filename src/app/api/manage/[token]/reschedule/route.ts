@@ -2,11 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { assignTeamToBooking } from "@/lib/scheduling-agent";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { fireOpsAlert } from "@/lib/ops-alert";
-import { formatSlotForDispatch } from "@/lib/dispatch-format";
+import { fireN8nWebhook } from "@/lib/n8n";
+import {
+  buildMapsLink,
+  formatSlotForDispatch,
+  addressQuality,
+} from "@/lib/dispatch-format";
+import { PLANS, calcJobDuration } from "@/lib/pricing";
 
 const RESCHEDULE_WINDOW_HOURS = 24;
-const JOB_DURATION_MINS = 90;
+/** Only used when the booking predates the plan/thermostats snapshot. */
+const FALLBACK_JOB_DURATION_MINS = 90;
 
 /**
  * POST /api/manage/[token]/reschedule
@@ -20,7 +28,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getClientIp(request);
   const rl = await checkRateLimit(`reschedule:${clientIp}`, 5, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many attempts." }, { status: 429 });
@@ -33,17 +41,11 @@ export async function POST(
   }
 
   let newSlotStart: string;
-  let newSlotEnd: string;
+  let clientSlotEnd: string | undefined;
   try {
     const body = await request.json();
     newSlotStart = body.new_slot_start;
-    // Default slot_end to slot_start + 90 minutes if not provided
-    if (body.new_slot_end) {
-      newSlotEnd = body.new_slot_end;
-    } else {
-      const endDate = new Date(new Date(newSlotStart).getTime() + JOB_DURATION_MINS * 60 * 1000);
-      newSlotEnd = endDate.toISOString();
-    }
+    clientSlotEnd = body.new_slot_end;
   } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
@@ -62,14 +64,53 @@ export async function POST(
   // 1. Fetch the booking
   const { data: booking, error: fetchError } = await supabase
     .from("bookings")
-    .select("id, status, slot_start, slot_end, team_id, address, customer_id")
+    .select(
+      "id, status, slot_start, slot_end, team_id, address, address_details, customer_id, plan, thermostats, price_net_fils"
+    )
     .eq("manage_token", token)
-    .returns<{ id: string; status: string; slot_start: string; slot_end: string; team_id: string | null; address: string; customer_id: string }[]>()
+    .returns<
+      {
+        id: string;
+        status: string;
+        slot_start: string;
+        slot_end: string;
+        team_id: string | null;
+        address: string;
+        address_details: Record<string, unknown> | null;
+        customer_id: string;
+        plan: string | null;
+        thermostats: number | null;
+        price_net_fils: number | null;
+      }[]
+    >()
     .single();
 
   if (fetchError || !booking) {
     return NextResponse.json({ error: "Booking not found." }, { status: 404 });
   }
+
+  // Recompute the job window from the booking's OWN plan + thermostats.
+  // The old hardcoded 90 minutes silently shrank every Elite/multi-
+  // thermostat job on reschedule (an Elite 3-thermostat job is 260 mins),
+  // so the slot looked free for a second booking that physically overlaps.
+  // A client-supplied new_slot_end is never trusted.
+  const planCfg = booking.plan ? PLANS[booking.plan] : undefined;
+  const jobDurationMins = planCfg
+    ? calcJobDuration(planCfg, booking.thermostats ?? 1)
+    : Math.max(
+        FALLBACK_JOB_DURATION_MINS,
+        Math.round(
+          (new Date(booking.slot_end).getTime() -
+            new Date(booking.slot_start).getTime()) /
+            60000
+        ) || FALLBACK_JOB_DURATION_MINS
+      );
+  if (clientSlotEnd && isNaN(new Date(clientSlotEnd).getTime())) {
+    return NextResponse.json({ error: "Invalid new_slot_end." }, { status: 400 });
+  }
+  const newSlotEnd = new Date(
+    new Date(newSlotStart).getTime() + jobDurationMins * 60 * 1000
+  ).toISOString();
 
   // 2. Validate status
   if (booking.status !== "confirmed") {
@@ -143,12 +184,14 @@ export async function POST(
     .eq("id", booking.id);
 
   // 7. Re-run team assignment for the new slot
+  let reassignedTeamId: string | null = null;
   try {
     const result = await assignTeamToBooking(
       booking.id,
       newSlotStart,
       booking.address
     );
+    reassignedTeamId = result.teamId;
     console.log(`Reschedule: reassigned team ${result.teamId} (${result.method}) for booking ${booking.id}`);
   } catch (err) {
     console.error("Reschedule team reassignment failed:", err);
@@ -160,8 +203,6 @@ export async function POST(
     } as never);
   }
 
-  // 8. Notify the owners of the reschedule. Dormant until
-  //    N8N_WEBHOOK_OPS_ALERT is configured.
   const { data: rescheduleCustomer } = await supabase
     .from("customers")
     .select("name, phone")
@@ -169,6 +210,65 @@ export async function POST(
     .returns<{ name: string; phone: string }[]>()
     .single();
 
+  // 8. Dispatch to the NEWLY assigned team. Without this the reschedule
+  //    moved the job and reassigned the crew, but nobody ever told the
+  //    crew — the customer waits at the new time for a team that was
+  //    never notified, i.e. a no-show caused by us.
+  const n8nDispatchUrl = process.env.N8N_WEBHOOK_TEAM_DISPATCH;
+  if (n8nDispatchUrl && reassignedTeamId) {
+    const { data: teamData } = await supabase
+      .from("teams")
+      .select("name, whatsapp_number")
+      .eq("id", reassignedTeamId)
+      .returns<{ name: string; whatsapp_number: string }[]>()
+      .maybeSingle();
+
+    const addrDetails = booking.address_details;
+
+    // PDPL: record that customer PII was shared with this team.
+    const { error: accessLogError } = await supabase
+      .from("team_data_access")
+      .insert({
+        team_id: reassignedTeamId,
+        booking_id: booking.id,
+        shared_fields: ["customer_name", "customer_phone", "address"],
+        channel: "n8n_team_dispatch",
+      } as never);
+    if (accessLogError) {
+      console.warn("team_data_access insert failed:", accessLogError.message);
+    }
+
+    fireN8nWebhook("team_dispatch", n8nDispatchUrl, {
+      event: "team_dispatch",
+      booking_id: booking.id,
+      team_id: reassignedTeamId,
+      team_name: teamData?.name || "",
+      team_whatsapp: teamData?.whatsapp_number || "",
+      customer_name: rescheduleCustomer?.name || "",
+      customer_phone: rescheduleCustomer?.phone || "",
+      address: booking.address || "",
+      address_quality: addressQuality(addrDetails),
+      maps_link: buildMapsLink(addrDetails, booking.address || ""),
+      building_name: addrDetails?.building_name || "",
+      flat_number: addrDetails?.flat_number || "",
+      floor: addrDetails?.floor || "",
+      additional_directions: addrDetails?.additional_directions || "",
+      slot_start: newSlotStart,
+      slot_start_human: formatSlotForDispatch(newSlotStart),
+      slot_end: newSlotEnd,
+      slot_end_human: formatSlotForDispatch(newSlotEnd),
+      plan: booking.plan || "",
+      price_aed: booking.price_net_fils
+        ? String(Math.round(booking.price_net_fils / 100))
+        : "",
+      rescheduled_from: oldSlotStart,
+      twilio_from: process.env.TWILIO_WHATSAPP_FROM || "",
+      content_sid: process.env.TWILIO_CONTENT_SID_TEAM_DISPATCH || "",
+    });
+  }
+
+  // 9. Notify the owners of the reschedule. Dormant until
+  //    N8N_WEBHOOK_OPS_ALERT is configured.
   fireOpsAlert("reschedule", {
     bookingId: booking.id,
     customerName: rescheduleCustomer?.name || "",

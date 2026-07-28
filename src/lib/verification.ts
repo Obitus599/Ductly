@@ -98,6 +98,35 @@ export async function createAndStoreCode(
 }
 
 /**
+ * Increment the wrong-guess counter ATOMICALLY.
+ *
+ * `attempts = <value we read> + 1` loses increments under concurrency: N
+ * parallel guesses all read the same value and all write back value+1, so
+ * an attacker firing requests in parallel burns far fewer than N of their
+ * allowance. The RPC does `attempts = attempts + 1` inside the row lock.
+ *
+ * Falls back to the read-then-write form only if the RPC is unavailable
+ * (migration not yet applied) — a slightly weaker counter beats no counter.
+ */
+async function recordFailedAttempt(codeId: string, observedAttempts: number): Promise<void> {
+  try {
+    const { error } = await (supabaseAdmin.rpc as Function)(
+      "increment_verification_attempt",
+      { p_id: codeId }
+    );
+    if (!error) return;
+    console.warn("increment_verification_attempt RPC failed:", error.message);
+  } catch (err) {
+    console.warn("increment_verification_attempt RPC threw:", err);
+  }
+
+  await supabaseAdmin
+    .from("verification_codes")
+    .update({ attempts: observedAttempts + 1 } as never)
+    .eq("id", codeId);
+}
+
+/**
  * Verify a submitted code against the newest unconsumed code for this
  * identifier+channel. On success the code is consumed (single-use); on a
  * wrong guess the attempt counter is incremented.
@@ -152,10 +181,7 @@ export async function verifyCode(
     crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(row.code_hash, "hex"));
 
   if (!match) {
-    await supabaseAdmin
-      .from("verification_codes")
-      .update({ attempts: row.attempts + 1 } as never)
-      .eq("id", row.id);
+    await recordFailedAttempt(row.id, row.attempts);
     return { ok: false, reason: "mismatch" };
   }
 

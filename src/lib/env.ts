@@ -16,6 +16,9 @@ const OPTIONAL_SERVER = [
   "ADMIN_API_KEY",
   "GOOGLE_MAPS_API_KEY",
   "OPENROUTER_API_KEY",
+  // Scheduled housekeeping: retention deletes + Tabby settlement
+  // reconciliation. Without it POST /api/cron/cleanup is disabled (503).
+  "CRON_SECRET",
 ] as const;
 
 export function validateEnv() {
@@ -25,6 +28,17 @@ export function validateEnv() {
     if (!process.env[key]) {
       missing.push(key);
     }
+  }
+
+  // Tabby's webhook now fails CLOSED — an unset secret makes every
+  // delivery 500, so a half-configured Tabby install silently stops
+  // confirming BNPL bookings. Surface it at boot, not at 3am.
+  if (
+    process.env.TABBY_SECRET_KEY &&
+    process.env.TABBY_MERCHANT_CODE &&
+    !process.env.TABBY_WEBHOOK_SECRET
+  ) {
+    missing.push("TABBY_WEBHOOK_SECRET (required once Tabby is configured)");
   }
 
   if (missing.length > 0) {
