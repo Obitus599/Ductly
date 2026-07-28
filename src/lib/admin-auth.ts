@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAdminToken } from "@/lib/admin-identity";
 
 /**
  * Admin auth check for API routes.
  *
  * Accepts either:
  * 1. x-admin-key header (for programmatic access)
- * 2. admin-token cookie (set by login flow) — VALIDATED here against
- *    Supabase, not merely checked for presence.
+ * 2. admin-token cookie (set by login flow) — validated AND AUTHORIZED
+ *    here against Supabase. We check not just that the token belongs to a
+ *    real Supabase user, but that the user is actually an admin (role
+ *    claim or ADMIN_EMAILS allowlist — see lib/admin-identity). A valid
+ *    session for any self-registered user is NOT admin access.
  *
  * Async + fail-closed. We must validate the token ourselves: the
  * middleware only validates the admin-token for `/admin` *page* paths,
@@ -24,28 +28,24 @@ export async function requireAdmin(request: NextRequest): Promise<NextResponse |
     return null;
   }
 
-  // 2. Dev convenience: no key configured and not production → allow.
-  if (!adminKey && process.env.NODE_ENV !== "production") {
+  // 2. Dev convenience: no key configured, and we are explicitly running a
+  //    development/test build → allow. Deliberately `=== development` (plus
+  //    test) rather than `!== production`: NODE_ENV is easy to leave unset
+  //    or set to something like "staging" on a real deployment, and the
+  //    old check turned every such box into an open admin API.
+  if (
+    !adminKey &&
+    (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test")
+  ) {
     return null;
   }
 
-  // 3. Cookie-based: validate the Supabase session token. Fail closed.
+  // 3. Cookie-based: validate the Supabase session token AND authorize it
+  //    as an admin. Fail closed on every uncertain path.
   const token = request.cookies.get("admin-token")?.value;
   if (token) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (supabaseUrl && serviceKey) {
-      try {
-        const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
-          headers: { Authorization: `Bearer ${token}`, apikey: serviceKey },
-          signal: AbortSignal.timeout(5_000),
-        });
-        if (res.ok) return null;
-      } catch (err) {
-        // Network failure / timeout — fail closed.
-        console.error("Admin token validation failed:", err);
-      }
-    }
+    const user = await verifyAdminToken(token);
+    if (user) return null;
   }
 
   return NextResponse.json(

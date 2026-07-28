@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/utils/supabase/middleware";
+import { verifyAdminToken } from "@/lib/admin-identity";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -10,51 +11,33 @@ export async function middleware(request: NextRequest) {
     !pathname.startsWith("/admin/login") &&
     !pathname.startsWith("/api/admin/auth")
   ) {
+    const redirectToLogin = (clearCookie = false) => {
+      const response = NextResponse.redirect(new URL("/admin/login", request.url));
+      if (clearCookie) response.cookies.set("admin-token", "", { maxAge: 0, path: "/" });
+      return response;
+    };
+
     const token = request.cookies.get("admin-token")?.value;
 
     if (!token) {
-      // In development without ADMIN_API_KEY, skip auth
-      if (!process.env.ADMIN_API_KEY && process.env.NODE_ENV !== "production") {
+      // Dev convenience: no key configured AND an explicit development/test
+      // build → skip. Kept in lockstep with lib/admin-auth.ts:requireAdmin
+      // (=== development/test, not !== production) so a staging box or an
+      // unset NODE_ENV can't leave the admin pages open.
+      if (
+        !process.env.ADMIN_API_KEY &&
+        (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test")
+      ) {
         return await updateSession(request);
       }
-      const loginUrl = new URL("/admin/login", request.url);
-      return NextResponse.redirect(loginUrl);
+      return redirectToLogin();
     }
 
-    // Verify token is valid by checking with Supabase. We deliberately
-    // FAIL CLOSED on errors: a transient Supabase outage must not turn
-    // a long-expired admin cookie into a valid session.
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!supabaseUrl || !serviceKey) {
-      // Missing config — refuse rather than guess
-      const loginUrl = new URL("/admin/login", request.url);
-      return NextResponse.redirect(loginUrl);
-    }
-
-    try {
-      const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          apikey: serviceKey,
-        },
-        signal: AbortSignal.timeout(5_000),
-      });
-
-      if (!res.ok) {
-        const loginUrl = new URL("/admin/login", request.url);
-        const response = NextResponse.redirect(loginUrl);
-        response.cookies.set("admin-token", "", { maxAge: 0, path: "/" });
-        return response;
-      }
-    } catch (err) {
-      // Network failure / timeout / abort — fail closed.
-      console.error("Admin token verification failed:", err);
-      const loginUrl = new URL("/admin/login", request.url);
-      const response = NextResponse.redirect(loginUrl);
-      response.cookies.set("admin-token", "", { maxAge: 0, path: "/" });
-      return response;
-    }
+    // Validate the token AND authorize it as an admin (role/allowlist).
+    // A valid session for any self-registered Supabase user is NOT admin
+    // access. verifyAdminToken fails closed on config/network/parse errors.
+    const user = await verifyAdminToken(token);
+    if (!user) return redirectToLogin(true);
   }
 
   return await updateSession(request);
