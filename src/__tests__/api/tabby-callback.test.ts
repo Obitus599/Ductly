@@ -25,8 +25,12 @@ vi.mock("@/utils/supabase/admin", () => ({
           select: () => ({
             eq: () => ({ returns: () => ({ maybeSingle: () => Promise.resolve({ data: bookingData }) }) }),
           }),
+          // markStatus is conditional: .update({status}).eq("id", id)
+          //                                            .eq("status", "pending")
           update: (payload: Record<string, unknown>) => ({
-            eq: (_c: string, id: string) => { updates.push({ id, ...payload }); return Promise.resolve({ error: null }); },
+            eq: (_c: string, id: string) => ({
+              eq: () => { updates.push({ id, ...payload }); return Promise.resolve({ error: null }); },
+            }),
           }),
         };
       }
@@ -121,5 +125,69 @@ describe("GET /api/tabby/callback", () => {
     const res = await call("booking_id=missing&result=success");
     expect(mockConfirm).not.toHaveBeenCalled();
     expect(loc(res)).toContain("/book");
+  });
+
+  describe("never shows success for an unconfirmed booking", () => {
+    it("Tabby outage (retrieve fails) → neutral pending page, NOT success", async () => {
+      // The regression this guards: retrieve failing left `st` undefined,
+      // no branch matched, and control fell through to the result-hint
+      // redirect — showing "Booking Confirmed" for a booking still
+      // `pending` with an uncaptured payment.
+      mockRetrieve.mockResolvedValue({ ok: false, errorMessage: "502 Bad Gateway" });
+      const res = await call("booking_id=book-1&result=success");
+      expect(mockConfirm).not.toHaveBeenCalled();
+      expect(mockCapture).not.toHaveBeenCalled();
+      expect(updates).toHaveLength(0); // no state change on an unknown outcome
+      expect(loc(res)).toContain("/book/pending?booking_id=book-1");
+      expect(loc(res)).not.toContain("/book/success");
+    });
+
+    it("non-terminal payment (CREATED) + result=success → pending page", async () => {
+      mockRetrieve.mockResolvedValue({ ok: true, paymentStatus: "CREATED" });
+      const res = await call("booking_id=book-1&result=success");
+      expect(mockConfirm).not.toHaveBeenCalled();
+      expect(loc(res)).toContain("/book/pending");
+      expect(loc(res)).not.toContain("/book/success");
+    });
+
+    it("missing tabby_payment_id + result=success → pending page", async () => {
+      bookingData = { ...BOOKING, tabby_payment_id: null };
+      const res = await call("booking_id=book-1&result=success");
+      expect(mockRetrieve).not.toHaveBeenCalled();
+      expect(mockConfirm).not.toHaveBeenCalled();
+      expect(loc(res)).toContain("/book/pending");
+    });
+
+    it("refuses to capture a booking with no price snapshot", async () => {
+      // capturePayment(id, 0) would settle the authorization for nothing
+      // and confirm a booking that was never actually paid for.
+      bookingData = { ...BOOKING, price_total_fils: null };
+      mockRetrieve.mockResolvedValue({ ok: true, paymentStatus: "AUTHORIZED" });
+      const res = await call("booking_id=book-1&result=success");
+      expect(mockCapture).not.toHaveBeenCalled();
+      expect(mockConfirm).not.toHaveBeenCalled();
+      expect(loc(res)).toContain("/book/pending");
+    });
+
+    it("already-confirmed booking short-circuits straight to success", async () => {
+      bookingData = { ...BOOKING, status: "confirmed" };
+      const res = await call("booking_id=book-1&result=success");
+      expect(mockRetrieve).not.toHaveBeenCalled();
+      expect(mockConfirm).not.toHaveBeenCalled();
+      expect(loc(res)).toContain("/book/success?booking_id=book-1");
+    });
+  });
+
+  describe("redirect host", () => {
+    it("ignores a spoofed X-Forwarded-Host and uses the configured app origin", async () => {
+      bookingData = { ...BOOKING, status: "confirmed" };
+      const res = (await GET(
+        new NextRequest("http://localhost:3000/api/tabby/callback?booking_id=book-1", {
+          headers: { "x-forwarded-host": "evil.example.com" },
+        })
+      )) as unknown as Response;
+      expect(loc(res)).not.toContain("evil.example.com");
+      expect(loc(res)).toContain("localhost:3000");
+    });
   });
 });

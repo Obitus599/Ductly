@@ -81,6 +81,27 @@ describe("POST /api/checkout", () => {
           }),
         };
       }
+      // Write-time blackout re-check (no blackouts by default).
+      if (table === "schedule_blackouts") {
+        return {
+          select: () => ({
+            lt: () => ({
+              gt: () => ({
+                returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "teams") {
+        return {
+          select: () => ({
+            eq: () => ({
+              returns: vi.fn().mockResolvedValue({ data: [{ id: "team-1" }], error: null }),
+            }),
+          }),
+        };
+      }
       if (table === "customers") {
         return {
           upsert: () => ({
@@ -101,10 +122,17 @@ describe("POST /api/checkout", () => {
               }),
             }),
           }),
+          // abandonBooking(): .update().eq(id).eq(status) — the second
+          // .eq is the "only if still pending" guard.
           update: () => ({
-            eq: vi.fn().mockResolvedValue({}),
+            eq: () => ({
+              eq: vi.fn().mockResolvedValue({ error: null }),
+            }),
           }),
         };
+      }
+      if (table === "error_log") {
+        return { insert: vi.fn().mockResolvedValue({ error: null }) };
       }
       return {};
     });

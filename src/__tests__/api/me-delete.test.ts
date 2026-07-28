@@ -12,6 +12,16 @@ vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
 }));
 
+// Email-OTP gate on the irreversible erasure. Default to verified so the
+// existing success-path tests exercise the deletion; the gate itself has a
+// dedicated test below.
+const mockIsContactVerified = vi.fn().mockResolvedValue(true);
+vi.mock("@/lib/verification", () => ({
+  isContactVerified: (...a: unknown[]) => mockIsContactVerified(...a),
+  normalizeIdentifier: (_c: string, v: string) => v.trim().toLowerCase(),
+  verificationConfigured: () => true,
+}));
+
 import { POST } from "@/app/api/me/delete/route";
 
 function makeRequest(body: unknown, raw = false): NextRequest {
@@ -146,8 +156,31 @@ describe("POST /api/me/delete", () => {
     const customerUpdateEq = vi.fn().mockResolvedValue({ error: null });
     const bookingsUpdateEq = vi.fn().mockResolvedValue({});
     const newsletterUpdateEq = vi.fn().mockResolvedValue({});
+    const contactUpdateEq = vi.fn().mockResolvedValue({ error: null });
+    const feedbackUpdateEq = vi.fn().mockResolvedValue({ error: null });
+    const codesDeleteEq = vi.fn().mockResolvedValue({ error: null });
+    // error_log purge is now three separate .delete().eq() calls (safe, no
+    // .or() DSL interpolation), one per JSON-path field.
+    const errorLogDeleteEq = vi.fn().mockResolvedValue({ error: null });
+    const errorLogInsert = vi.fn().mockResolvedValue({ error: null });
 
     mockSupabase.from.mockImplementation((table: string) => {
+      // Residual-PII sweep targets (see the PDPL erasure block in the route)
+      if (table === "contact_submissions") {
+        return { update: () => ({ eq: contactUpdateEq }) };
+      }
+      if (table === "feedback") {
+        return { update: () => ({ eq: feedbackUpdateEq }) };
+      }
+      if (table === "verification_codes") {
+        return { delete: () => ({ eq: codesDeleteEq }) };
+      }
+      if (table === "error_log") {
+        return {
+          delete: () => ({ eq: errorLogDeleteEq }),
+          insert: errorLogInsert,
+        };
+      }
       if (table === "bookings") {
         if (bookingsCall === 0) {
           bookingsCall++;
@@ -173,7 +206,12 @@ describe("POST /api/me/delete", () => {
             eq: () => ({
               returns: () => ({
                 single: vi.fn().mockResolvedValue({
-                  data: { id: "cust-1", email: "alex@test.com", deleted_at: null },
+                  data: {
+                    id: "cust-1",
+                    email: "alex@test.com",
+                    phone: "+971501234567",
+                    deleted_at: null,
+                  },
                 }),
               }),
             }),
@@ -195,5 +233,111 @@ describe("POST /api/me/delete", () => {
     expect(customerUpdateEq).toHaveBeenCalledWith("id", "cust-1");
     expect(bookingsUpdateEq).toHaveBeenCalledWith("customer_id", "cust-1");
     expect(newsletterUpdateEq).toHaveBeenCalledWith("email", "alex@test.com");
+
+    // Erasure must not stop at the customers row — these four tables all
+    // held the requester's raw name / email / phone.
+    expect(contactUpdateEq).toHaveBeenCalledWith("email", "alex@test.com");
+    expect(feedbackUpdateEq).toHaveBeenCalledWith("customer_id", "cust-1");
+    expect(codesDeleteEq).toHaveBeenCalledWith("identifier", "alex@test.com");
+    expect(codesDeleteEq).toHaveBeenCalledWith("identifier", "+971501234567");
+    // Deleted via safe .eq() on each JSON path, never an interpolated .or().
+    expect(errorLogDeleteEq).toHaveBeenCalledWith("payload->>email", "alex@test.com");
+    expect(errorLogDeleteEq).toHaveBeenCalledWith("payload->>identifier", "alex@test.com");
+    // Clean run → nothing flagged for manual completion.
+    expect(body.residual_tables).toBeUndefined();
+    expect(errorLogInsert).not.toHaveBeenCalled();
+  });
+
+  it("reports residual tables instead of claiming a clean erasure", async () => {
+    let bookingsCall = 0;
+    const errorLogInsert = vi.fn().mockResolvedValue({ error: null });
+
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === "contact_submissions") {
+        return {
+          update: () => ({
+            eq: vi.fn().mockResolvedValue({ error: { message: "permission denied" } }),
+          }),
+        };
+      }
+      if (table === "feedback") {
+        return { update: () => ({ eq: vi.fn().mockResolvedValue({ error: null }) }) };
+      }
+      if (table === "verification_codes") {
+        return { delete: () => ({ eq: vi.fn().mockResolvedValue({ error: null }) }) };
+      }
+      if (table === "error_log") {
+        return {
+          delete: () => ({ eq: vi.fn().mockResolvedValue({ error: null }) }),
+          insert: errorLogInsert,
+        };
+      }
+      if (table === "bookings") {
+        if (bookingsCall === 0) {
+          bookingsCall++;
+          return tokenLookup("cust-1");
+        }
+        if (bookingsCall === 1) {
+          bookingsCall++;
+          return futureBookingsLookup([]);
+        }
+        return { update: () => ({ eq: vi.fn().mockResolvedValue({}) }) };
+      }
+      if (table === "customers") {
+        return {
+          select: () => ({
+            eq: () => ({
+              returns: () => ({
+                single: vi.fn().mockResolvedValue({
+                  data: { id: "cust-1", email: "alex@test.com", phone: null, deleted_at: null },
+                }),
+              }),
+            }),
+          }),
+          update: () => ({ eq: vi.fn().mockResolvedValue({ error: null }) }),
+        };
+      }
+      if (table === "newsletter_subscribers") {
+        return { update: () => ({ eq: vi.fn().mockResolvedValue({}) }) };
+      }
+      return {};
+    });
+
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await POST(makeRequest({ token: VALID_TOKEN }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.residual_tables).toContain("contact_submissions");
+    expect(errorLogInsert).toHaveBeenCalled();
+  });
+
+  it("blocks the irreversible erasure until the email is OTP-verified (403)", async () => {
+    // A leaked/forwarded booking token must not be a self-destruct button.
+    mockIsContactVerified.mockResolvedValueOnce(false);
+    let bookingsCall = 0;
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === "bookings") {
+        if (bookingsCall === 0) {
+          bookingsCall++;
+          return tokenLookup("cust-1");
+        }
+        return {};
+      }
+      if (table === "customers") {
+        return customerLookup({
+          id: "cust-1",
+          email: "alex@test.com",
+          phone: "+971501234567",
+          deleted_at: null,
+        });
+      }
+      return {};
+    });
+
+    const res = await POST(makeRequest({ token: VALID_TOKEN }));
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.needs_verification).toBe(true);
+    expect(body.channel).toBe("email");
   });
 });

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { fireN8nWebhook } from "@/lib/n8n";
 import { sendWhatsAppOtp, whatsappConfigured } from "@/lib/twilio-whatsapp";
 import { sendEmail, emailConfigured } from "@/lib/email";
 import { renderVerificationEmail } from "@/lib/email-templates";
 import { isUaeMobile } from "@/lib/phone-uae";
+import { isValidEmail } from "@/lib/email-validate";
 import {
   createAndStoreCode,
   normalizeIdentifier,
@@ -13,7 +15,6 @@ import {
   type VerifyChannel,
 } from "@/lib/verification";
 
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /**
  * POST /api/verify/send
@@ -25,7 +26,7 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
  * response (we don't leak delivery internals).
  */
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = getClientIp(request);
   const rl = await checkRateLimit(`verify-send:${ip}`, 8, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many requests. Please wait." }, { status: 429 });
@@ -45,9 +46,15 @@ export async function POST(request: NextRequest) {
   if (typeof body.identifier !== "string" || !body.identifier.trim()) {
     return NextResponse.json({ error: "identifier is required." }, { status: 400 });
   }
+  // Hard length cap BEFORE the value is used to build a rate-limit key.
+  // An unbounded identifier could otherwise overflow the rate_limits btree
+  // key and error the insert (see lib/rate-limit safeRateLimitKey).
+  if (body.identifier.length > 254) {
+    return NextResponse.json({ error: "Identifier too long." }, { status: 400 });
+  }
 
   const identifier = normalizeIdentifier(channel, body.identifier);
-  if (channel === "email" && !EMAIL_RE.test(identifier)) {
+  if (channel === "email" && !isValidEmail(identifier)) {
     return NextResponse.json({ error: "Invalid email address." }, { status: 400 });
   }
   if (channel === "sms" && !isUaeMobile(identifier)) {

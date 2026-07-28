@@ -144,7 +144,8 @@ describe("POST /api/verify/send", () => {
     expect(mockFireN8n).not.toHaveBeenCalled();
     const [opts] = mockSendEmail.mock.calls[0];
     expect(opts.to).toBe("alex@test.com");
-    expect(opts.subject).toContain("123456");
+    // Code goes in the body only — never the subject line.
+    expect(opts.subject).not.toContain("123456");
     expect(opts.html).toContain("123456");
     expect(opts.text).toContain("123456");
   });
