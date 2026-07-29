@@ -10,8 +10,8 @@ export async function getActiveTeams() {
   const supabase = await createClient();
 
   const { data: teams, error } = await supabase
-    .from("teams")
-    .select("*")
+    .from("public_teams")
+    .select("id, name, active")
     .eq("active", true);
 
   if (error) {
