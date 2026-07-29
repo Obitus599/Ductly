@@ -9,6 +9,7 @@ interface Booking {
   slot_start: string;
   slot_end: string;
   address: string;
+  address_details: Record<string, unknown> | null;
   status: string;
   payment_intent_id: string | null;
   customer_id: string;
@@ -223,6 +224,25 @@ export default function BookingDetailPage() {
                 </div>
               ))}
             </div>
+            {(() => {
+              const ad = booking.address_details as { lat?: number; lng?: number } | null;
+              const q = ad?.lat && ad?.lng
+                ? `${ad.lat},${ad.lng}`
+                : encodeURIComponent(booking.address);
+              return (
+                <div className="mt-3 rounded-[10px] overflow-hidden border" style={{ borderColor: "rgb(238,240,244)", height: 200 }}>
+                  <iframe
+                    title="Booking location"
+                    width="100%"
+                    height="200"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://maps.google.com/maps?q=${q}&z=16&output=embed`}
+                  />
+                </div>
+              );
+            })()}
           </div>
 
           {/* Customer Info */}

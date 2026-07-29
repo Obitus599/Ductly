@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     .range(offset, offset + limit - 1);
 
   if (!includeTest) {
-    query = query.eq("is_test_data", false);
+    query = query.or("is_test_data.is.null,is_test_data.eq.false");
   }
   if (status) {
     query = query.eq("status", status);

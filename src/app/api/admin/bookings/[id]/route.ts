@@ -25,6 +25,7 @@ export async function GET(
     cancelled_at: string | null; cancelled_by: string | null; cancellation_reason: string | null;
     refund_id: string | null; refund_status: string | null; completed_at: string | null;
     no_show_at: string | null; created_at: string; updated_at: string;
+    address_details: Record<string, unknown> | null;
   }
 
   const { data: booking, error } = await supabase

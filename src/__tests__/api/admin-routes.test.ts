@@ -39,6 +39,7 @@ describe("GET /api/admin/bookings", () => {
       returns: vi.fn().mockResolvedValue(finalResult),
     };
     chain.eq = vi.fn().mockReturnValue(chain);
+    chain.or = vi.fn().mockReturnValue(chain);
     chain.gte = vi.fn().mockReturnValue(chain);
     chain.lt = vi.fn().mockReturnValue(chain);
 
@@ -69,6 +70,7 @@ describe("GET /api/admin/bookings", () => {
       }),
     };
     chain.eq = vi.fn().mockReturnValue(chain);
+    chain.or = vi.fn().mockReturnValue(chain);
     chain.gte = vi.fn().mockReturnValue(chain);
     chain.lt = vi.fn().mockReturnValue(chain);
 

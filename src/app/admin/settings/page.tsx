@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { PLANS } from "@/app/book/shared";
+import { useState, useEffect } from "react";
+import { PLANS, type PlanConfig } from "@/lib/pricing";
 
 const CARD: React.CSSProperties = {
   background: "white",
@@ -9,29 +9,96 @@ const CARD: React.CSSProperties = {
   borderRadius: 16,
 };
 
-interface PlanSettings {
+const INPUT_CLASS =
+  "w-full rounded-[10px] border-2 border-[rgb(230,230,230)] bg-white px-3 py-2 text-[13px] text-[rgb(61,61,61)] focus:border-[rgb(147,216,216)] focus:outline-none transition-colors";
+
+interface PlanRate {
+  key: string;
+  label: string;
   rate: number;
   setupMins: number;
   perThermostatMins: number;
 }
 
-/**
- * Settings page — displays current hardcoded config values as a reference.
- * These values are compiled into the code (shared.tsx, slot-helpers.ts, etc.)
- * and require a code change + redeploy to modify.
- *
- * This page serves as a central view of all business rules.
- */
 export default function SettingsPage() {
   const [copied, setCopied] = useState("");
+  const [rates, setRates] = useState<PlanRate[]>([]);
+  const [editing, setEditing] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
 
-  // Derive from the single source of truth in shared.tsx
-  const plans: Record<string, PlanSettings> = Object.fromEntries(
-    Object.values(PLANS).map((p) => [
-      p.name,
-      { rate: p.rate, setupMins: p.setupMins, perThermostatMins: p.perThermostatMins },
-    ])
-  );
+  useEffect(() => {
+    fetch("/api/admin/settings/pricing")
+      .then((r) => r.json())
+      .then((data) => {
+        const dbRates = (data.pricing ?? []) as { plan_key: string; rate: number }[];
+        const merged = Object.values(PLANS).map((p) => {
+          const db = dbRates.find((r: { plan_key: string }) => r.plan_key === p.key);
+          return {
+            key: p.key,
+            label: p.label,
+            rate: db ? db.rate : p.rate,
+            setupMins: p.setupMins,
+            perThermostatMins: p.perThermostatMins,
+          };
+        });
+        setRates(merged);
+        const init: Record<string, number> = {};
+        merged.forEach((p) => { init[p.key] = p.rate; });
+        setEditing(init);
+      })
+      .catch(() => {
+        const fallback = Object.values(PLANS).map((p) => ({
+          key: p.key,
+          label: p.label,
+          rate: p.rate,
+          setupMins: p.setupMins,
+          perThermostatMins: p.perThermostatMins,
+        }));
+        setRates(fallback);
+        const init: Record<string, number> = {};
+        fallback.forEach((p) => { init[p.key] = p.rate; });
+        setEditing(init);
+      });
+  }, []);
+
+  async function handleSave() {
+    if (saving) return;
+    setSaving(true);
+    setSaveMsg("");
+    try {
+      const ratesPayload: Record<string, number> = {};
+      rates.forEach((p) => {
+        ratesPayload[p.key] = editing[p.key] ?? p.rate;
+      });
+      const res = await fetch("/api/admin/settings/pricing", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rates: ratesPayload }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setSaveMsg(data.error || "Save failed."); return; }
+      const updated = (data.pricing ?? []) as { plan_key: string; rate: number }[];
+      setRates((prev) =>
+        prev.map((p) => {
+          const u = updated.find((r) => r.plan_key === p.key);
+          return u ? { ...p, rate: u.rate } : p;
+        })
+      );
+      setSaveMsg("Rates updated. Changes take effect within 60 seconds.");
+    } catch {
+      setSaveMsg("Network error.");
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(""), 4000);
+    }
+  }
+
+  function copyValue(text: string, label: string) {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(""), 1500);
+  }
 
   const scheduling = [
     { label: "Working Hours", value: "08:00 – 18:00", code: "DAY_START_HOUR / DAY_END_HOUR" },
@@ -56,48 +123,47 @@ export default function SettingsPage() {
     { label: "Stripe", env: "STRIPE_SECRET_KEY", status: "Required" },
     { label: "Stripe Webhook", env: "STRIPE_WEBHOOK_SECRET", status: "Required" },
     { label: "Supabase", env: "NEXT_PUBLIC_SUPABASE_URL", status: "Required" },
-    { label: "Google Maps (Server)", env: "GOOGLE_MAPS_API_KEY", status: "Optional — fallback: flat 20-min buffer" },
-    { label: "Google Maps (Client)", env: "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", status: "Optional — fallback: text address input" },
-    { label: "OpenRouter (AI Agent)", env: "OPENROUTER_API_KEY", status: "Optional — fallback: least-booked team" },
-    { label: "n8n: Booking Confirmed", env: "N8N_WEBHOOK_BOOKING_CONFIRMED", status: "Optional — no notification if unset" },
-    { label: "n8n: Payment Failed", env: "N8N_WEBHOOK_PAYMENT_FAILED", status: "Optional — no notification if unset" },
-    { label: "n8n: Team Dispatch", env: "N8N_WEBHOOK_TEAM_DISPATCH", status: "Optional — no notification if unset" },
+    { label: "Google Maps (Server)", env: "GOOGLE_MAPS_API_KEY", status: "Optional" },
+    { label: "Google Maps (Client)", env: "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", status: "Optional" },
+    { label: "OpenRouter (AI Agent)", env: "OPENROUTER_API_KEY", status: "Optional" },
+    { label: "n8n: Booking Confirmed", env: "N8N_WEBHOOK_BOOKING_CONFIRMED", status: "Optional" },
+    { label: "n8n: Payment Failed", env: "N8N_WEBHOOK_PAYMENT_FAILED", status: "Optional" },
+    { label: "n8n: Team Dispatch", env: "N8N_WEBHOOK_TEAM_DISPATCH", status: "Optional" },
   ];
 
-  function copyValue(text: string, label: string) {
-    navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(""), 1500);
-  }
+  const hasDbConfig = rates.length > 0;
 
   return (
     <div className="max-w-3xl">
-      {/* Info banner */}
-      <div
-        className="p-4 rounded-[12px] mb-6 flex items-start gap-3"
-        style={{ background: "rgba(147,216,216,0.08)", border: "1px solid rgba(147,216,216,0.2)" }}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(80,160,160)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="16" x2="12" y2="12" />
-          <line x1="12" y1="8" x2="12.01" y2="8" />
-        </svg>
-        <p className="text-[13px]" style={{ fontFamily: "var(--font-body)", color: "rgb(60,140,130)" }}>
-          These values are currently hardcoded in the application. To change them, update the source code and redeploy.
-          A future update will make these configurable from this page.
-        </p>
-      </div>
 
-      {/* Pricing */}
+      {/* Pricing — now configurable */}
       <div className="p-5 mb-6" style={CARD}>
-        <h3 className="text-[16px] font-normal tracking-[-0.02em] mb-4" style={{ fontFamily: "var(--font-heading)", color: "rgb(61,61,61)" }}>
-          Pricing & Duration
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-[16px] font-normal tracking-[-0.02em]" style={{ fontFamily: "var(--font-heading)", color: "rgb(61,61,61)" }}>
+            Pricing & Duration
+          </h3>
+          {hasDbConfig && (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleSave}
+              className="px-4 py-2 rounded-[10px] text-[13px] font-medium text-white transition-all hover:brightness-110 disabled:opacity-50"
+              style={{ fontFamily: "var(--font-cta)", background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))" }}
+            >
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
+          )}
+        </div>
+        {saveMsg && (
+          <div className="mb-3 text-[12px] px-3 py-2 rounded-[8px]" style={{ fontFamily: "var(--font-body)", background: "rgba(34,197,94,0.08)", color: "rgb(34,160,84)" }}>
+            {saveMsg}
+          </div>
+        )}
         <div className="overflow-hidden rounded-[10px] border" style={{ borderColor: "rgb(238,240,244)" }}>
           <table className="w-full text-[13px]">
             <thead>
               <tr style={{ background: "rgb(247,248,250)" }}>
-                {["Plan", "Rate / Thermostat", "Setup Time", "Per Thermostat", "Example (2 units)"].map((h) => (
+                {["Plan", "Rate / Thermostat (AED)", "Setup Time", "Per Thermostat", "Example (2 units)"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left font-medium" style={{ fontFamily: "var(--font-body)", color: "rgb(140,145,155)" }}>
                     {h}
                   </th>
@@ -105,23 +171,44 @@ export default function SettingsPage() {
               </tr>
             </thead>
             <tbody>
-              {Object.entries(plans).map(([name, p]) => {
+              {(hasDbConfig ? rates : Object.values(PLANS).map((p) => ({
+                key: p.key, label: p.label, rate: p.rate, setupMins: p.setupMins, perThermostatMins: p.perThermostatMins,
+              }))).map((p) => {
+                const currentRate = hasDbConfig ? (editing[p.key] ?? p.rate) : p.rate;
                 const exampleDuration = p.setupMins + p.perThermostatMins * 2;
                 return (
-                  <tr key={name} style={{ borderTop: "1px solid rgb(245,246,248)" }}>
-                    <td className="px-4 py-2.5 font-medium" style={{ fontFamily: "var(--font-body)", color: "rgb(61,61,61)" }}>{name}</td>
-                    <td className="px-4 py-2.5" style={{ fontFamily: "var(--font-body)", color: "rgb(80,85,95)" }}>AED {p.rate}</td>
+                  <tr key={p.key} style={{ borderTop: "1px solid rgb(245,246,248)" }}>
+                    <td className="px-4 py-2.5 font-medium" style={{ fontFamily: "var(--font-body)", color: "rgb(61,61,61)" }}>{p.label}</td>
+                    <td className="px-4 py-2.5">
+                      {hasDbConfig ? (
+                        <input
+                          type="number"
+                          className={INPUT_CLASS}
+                          style={{ fontFamily: "var(--font-body)", width: 100 }}
+                          value={editing[p.key] ?? p.rate}
+                          min={1}
+                          max={100000}
+                          onChange={(e) => setEditing((prev) => ({ ...prev, [p.key]: Math.max(1, Number(e.target.value) || 1) }))}
+                        />
+                      ) : (
+                        <span style={{ fontFamily: "var(--font-body)", color: "rgb(80,85,95)" }}>AED {p.rate}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5" style={{ fontFamily: "var(--font-body)", color: "rgb(80,85,95)" }}>{p.setupMins} min</td>
                     <td className="px-4 py-2.5" style={{ fontFamily: "var(--font-body)", color: "rgb(80,85,95)" }}>{p.perThermostatMins} min</td>
-                    <td className="px-4 py-2.5" style={{ fontFamily: "var(--font-body)", color: "rgb(140,145,155)" }}>{exampleDuration} min / AED {p.rate * 2}</td>
+                    <td className="px-4 py-2.5" style={{ fontFamily: "var(--font-body)", color: "rgb(140,145,155)" }}>
+                      {exampleDuration} min / AED {currentRate * 2}
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        <p className="text-[12px] mt-2" style={{ fontFamily: "var(--font-body)", color: "rgb(180,185,195)" }}>
-          Source: src/app/book/shared.tsx
+        <p className="text-[12px] mt-2" style={{ fontFamily: "var(--font-body)", color: "rgb(160,160,160)" }}>
+          {hasDbConfig
+            ? "Rates are stored in the database. Changes take effect after save."
+            : "Rates are loaded from compile-time defaults. Add the pricing_config table to enable editing."}
         </p>
       </div>
 
