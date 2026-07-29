@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 
 const LOCK_TTL_MINS = 10;
 
@@ -14,7 +15,7 @@ const LOCK_TTL_MINS = 10;
  */
 export async function POST(request: NextRequest) {
   // Rate limit: 20 lock attempts per IP per 5 minutes
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getClientIp(request);
   const rl = await checkRateLimit(`lock:${clientIp}`, 20, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   // Rate limit: 30 delete attempts per IP per 5 minutes
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getClientIp(request);
   const rl = await checkRateLimit(`lock-del:${clientIp}`, 30, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json(

@@ -133,3 +133,85 @@ describe("fireN8nWebhook", () => {
     expect(result).toBeUndefined();
   });
 });
+
+// ── Redaction + transport safety ────────────────────────────────────────────
+
+import { redactPayload, isAllowedWebhookUrl } from "@/lib/n8n";
+
+describe("redactPayload", () => {
+  it("strips OTP codes — error_log must never become a plaintext code store", () => {
+    const out = redactPayload({ event: "verify_email", email: "a@b.com", code: "123456" }) as Record<string, unknown>;
+    expect(out.code).toBe("[redacted]");
+    expect(out.email).toBe("[redacted]");
+    // Non-sensitive keys survive so a failure is still debuggable.
+    expect(out.event).toBe("verify_email");
+  });
+
+  it("strips customer PII from a dispatch payload but keeps the shape", () => {
+    const out = redactPayload({
+      booking_id: "book-1",
+      team_id: "team-1",
+      customer_name: "Alex",
+      customer_phone: "+971501234567",
+      address: "Marina Tower 1",
+      maps_link: "https://maps.google.com/?q=25,55",
+      slot_start: "2026-08-01T10:00:00+04:00",
+    }) as Record<string, unknown>;
+
+    expect(out.booking_id).toBe("book-1");
+    expect(out.team_id).toBe("team-1");
+    expect(out.slot_start).toBe("2026-08-01T10:00:00+04:00");
+    expect(out.customer_name).toBe("[redacted]");
+    expect(out.customer_phone).toBe("[redacted]");
+    expect(out.address).toBe("[redacted]");
+    expect(out.maps_link).toBe("[redacted]");
+  });
+
+  it("redacts a sensitively-named container wholesale, children included", () => {
+    const out = redactPayload({
+      address_details: { building_name: "Tower", floor: "12", lat: 25.1 },
+    }) as Record<string, unknown>;
+    // `address_details` matches on its own name, so nothing under it can
+    // leak — including the lat/lng that pinpoint the customer's home.
+    expect(out.address_details).toBe("[redacted]");
+  });
+
+  it("recurses into neutrally-named objects and arrays", () => {
+    const out = redactPayload({
+      meta: { building_name: "Tower", floor: "12", unit_count: 3 },
+      buyers: [{ email: "a@b.com", id: "x" }],
+    }) as Record<string, Record<string, unknown>>;
+    expect(out.meta.building_name).toBe("[redacted]");
+    expect(out.meta.floor).toBe("[redacted]");
+    expect(out.meta.unit_count).toBe(3);
+    expect((out.buyers as unknown as Record<string, unknown>[])[0].email).toBe("[redacted]");
+    expect((out.buyers as unknown as Record<string, unknown>[])[0].id).toBe("x");
+  });
+
+  it("truncates pathologically deep structures instead of recursing forever", () => {
+    let deep: Record<string, unknown> = { id: "leaf" };
+    for (let i = 0; i < 12; i++) deep = { nested: deep };
+    expect(JSON.stringify(redactPayload(deep))).toContain("[truncated]");
+  });
+});
+
+describe("isAllowedWebhookUrl", () => {
+  it("accepts https", () => {
+    expect(isAllowedWebhookUrl("https://n8n.ductly.ae/webhook/x")).toBe(true);
+  });
+
+  it("rejects plain http to a remote host (PII would go over the wire in clear text)", () => {
+    expect(isAllowedWebhookUrl("http://n8n.ductly.ae/webhook/x")).toBe(false);
+  });
+
+  it("allows http on loopback for local development", () => {
+    expect(isAllowedWebhookUrl("http://localhost:5678/webhook/x")).toBe(true);
+    expect(isAllowedWebhookUrl("http://127.0.0.1:5678/webhook/x")).toBe(true);
+  });
+
+  it("rejects non-http schemes and malformed URLs", () => {
+    expect(isAllowedWebhookUrl("file:///etc/passwd")).toBe(false);
+    expect(isAllowedWebhookUrl("not a url")).toBe(false);
+    expect(isAllowedWebhookUrl("")).toBe(false);
+  });
+});

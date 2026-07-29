@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { vatFromGross } from "@/lib/vat";
+
+/** How long after checkout the success page may still read a booking. */
+const BOOKING_DETAILS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /**
  * GET /api/booking-details?session_id=cs_xxx  (Stripe)
@@ -14,7 +18,7 @@ import { vatFromGross } from "@/lib/vat";
  */
 export async function GET(request: NextRequest) {
   const clientIp =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    getClientIp(request);
   const rl = await checkRateLimit(`booking-details:${clientIp}`, 15, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -30,7 +34,7 @@ export async function GET(request: NextRequest) {
     const { data: booking } = await supabaseAdmin
       .from("bookings")
       .select(
-        "status, plan, address, slot_start, thermostats, price_net_fils, price_vat_fils, price_total_fils"
+        "status, plan, address, slot_start, thermostats, price_net_fils, price_vat_fils, price_total_fils, created_at"
       )
       .eq("id", bookingId)
       .returns<
@@ -43,6 +47,7 @@ export async function GET(request: NextRequest) {
           price_net_fils: number | null;
           price_vat_fils: number | null;
           price_total_fils: number | null;
+          created_at: string;
         }[]
       >()
       .maybeSingle();
@@ -51,6 +56,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: "Booking not found or not yet confirmed." },
         { status: 404 }
+      );
+    }
+
+    // This endpoint returns the service address, and the only thing
+    // guarding it is knowing the booking UUID. That's fine for the
+    // just-paid success page it exists to serve, but there's no reason for
+    // it to keep serving that address forever — a leaked id (browser
+    // history, a shared link, a proxy log) would stay live indefinitely.
+    // Ongoing access to a booking goes through /manage/<manage_token>.
+    const ageMs = Date.now() - new Date(booking.created_at).getTime();
+    if (!Number.isFinite(ageMs) || ageMs > BOOKING_DETAILS_MAX_AGE_MS) {
+      return NextResponse.json(
+        {
+          error:
+            "This booking link has expired. Use the management link from your confirmation email.",
+        },
+        { status: 410 }
       );
     }
 

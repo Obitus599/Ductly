@@ -5,6 +5,9 @@
 
 -- Enable UUID generation
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- btree_gist: lets an exclusion constraint mix `team_id WITH =` and
+-- `tstzrange(...) WITH &&` in a single index (see slot_locks below).
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- ============================================================
 -- 1. TEAMS
@@ -51,8 +54,13 @@ CREATE TABLE bookings (
   slot_start TIMESTAMPTZ NOT NULL,
   slot_end TIMESTAMPTZ NOT NULL,
   address TEXT NOT NULL,
+  -- Keep in sync with 20260421150441_cancellation_reschedule.sql. Any
+  -- status written by the app MUST appear here — a value outside the list
+  -- makes the UPDATE fail with 23514, and an unchecked failure leaves the
+  -- booking in its old state (e.g. holding a slot forever).
   status TEXT NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending', 'confirmed', 'completed', 'cancelled', 'no_show')),
+    CHECK (status IN ('pending', 'confirmed', 'completed', 'cancelled',
+                      'no_show', 'payment_failed', 'expired', 'rescheduled')),
   payment_intent_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -75,7 +83,14 @@ CREATE TABLE booking_locks (
   slot_start TIMESTAMPTZ NOT NULL,
   session_id TEXT NOT NULL,
   locked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  expires_at TIMESTAMPTZ NOT NULL
+  expires_at TIMESTAMPTZ NOT NULL,
+  -- Bound the TTL and horizon so no writer can mint an immortal hold or one
+  -- absurdly far in the future (the app uses a 10-minute TTL). Kept in sync
+  -- with migration 20260728000000.
+  CONSTRAINT booking_locks_ttl_bound
+    CHECK (expires_at > locked_at AND expires_at <= locked_at + INTERVAL '15 minutes'),
+  CONSTRAINT booking_locks_slot_horizon
+    CHECK (slot_start <= locked_at + INTERVAL '180 days')
 );
 
 CREATE INDEX idx_booking_locks_slot_start ON booking_locks(slot_start);
@@ -90,6 +105,16 @@ DECLARE
   active_team_count INT;
   current_lock_count INT;
 BEGIN
+  -- Serialise concurrent inserts for THIS slot. Without it the count
+  -- below and the insert that follows are two separate steps, and two
+  -- customers racing for the last free slot both read "0 used" and both
+  -- win — one of them ends up charged with no team able to serve them.
+  -- Different slots keep running fully in parallel.
+  PERFORM pg_advisory_xact_lock(
+    hashtext('booking_locks_slot')::int,
+    (extract(epoch FROM NEW.slot_start)::bigint % 2147483647)::int
+  );
+
   -- Count active teams
   SELECT COUNT(*) INTO active_team_count
   FROM teams
@@ -123,9 +148,19 @@ CREATE TABLE slot_locks (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
   slot_start TIMESTAMPTZ NOT NULL,
+  slot_end TIMESTAMPTZ NOT NULL,
   booking_id UUID NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(team_id, slot_start)
+  UNIQUE(team_id, slot_start),
+  CONSTRAINT slot_locks_range_valid CHECK (slot_end > slot_start),
+  -- UNIQUE(team_id, slot_start) only catches jobs starting at the exact
+  -- same instant. A 10:00–11:30 and a 10:30–12:00 job for one team
+  -- overlap in reality but not in that constraint — this exclusion
+  -- rejects any temporal overlap for the same team.
+  CONSTRAINT slot_locks_no_overlap EXCLUDE USING gist (
+    team_id WITH =,
+    tstzrange(slot_start, slot_end, '[)') WITH &&
+  )
 );
 
 CREATE INDEX idx_slot_locks_slot_start ON slot_locks(slot_start);
@@ -279,52 +314,33 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================
--- 13. RLS POLICIES (basic - refine per role as needed)
--- These allow service_role full access. Refine for anon/authenticated.
+-- 13. RLS POLICIES
+--
+-- The app is SERVER-SIDE ONLY: every query runs through the service-role
+-- client (utils/supabase/admin.ts), which bypasses RLS. So anon/authenticated
+-- need NO policies at all — an absent policy on an RLS-enabled table means
+-- "no direct public access", which is exactly what we want for a public
+-- (publishable) anon key that ships to browsers.
+--
+-- Earlier scaffold policies used `USING (true)`, which exposed full tables
+-- (customer PII, booking calendars, crew WhatsApp numbers) to anyone with
+-- the anon key. Later migrations dropped them; this file is kept in sync so
+-- a fresh rebuild from schema.sql alone is equally locked down. Do NOT add
+-- a `USING (true)` SELECT policy back to any table holding PII.
 -- ============================================================
 
--- Teams: public read for active teams
-CREATE POLICY "Anyone can view active teams"
-  ON teams FOR SELECT
-  USING (active = true);
-
--- Team schedules: public read for active schedules
+-- Team schedules: working-hours only (no PII). Drives nothing client-side
+-- today (slots are computed server-side), but harmless to expose.
 CREATE POLICY "Anyone can view active schedules"
   ON team_schedules FOR SELECT
   USING (active = true);
 
--- Booking locks: allow insert/select for anonymous sessions
-CREATE POLICY "Anyone can create booking locks"
-  ON booking_locks FOR INSERT
-  WITH CHECK (true);
-
-CREATE POLICY "Anyone can view booking locks"
-  ON booking_locks FOR SELECT
-  USING (true);
-
-CREATE POLICY "Anyone can delete own booking locks"
-  ON booking_locks FOR DELETE
-  USING (true);
-
--- Bookings: authenticated users can view their own
-CREATE POLICY "Users can view own bookings"
-  ON bookings FOR SELECT
-  USING (true);
-
--- Customers: authenticated users can manage own profile
-CREATE POLICY "Users can view own customer record"
-  ON customers FOR SELECT
-  USING (true);
-
--- Slot locks: read access for availability checks
-CREATE POLICY "Anyone can view slot locks"
-  ON slot_locks FOR SELECT
-  USING (true);
-
--- Feedback: public read
-CREATE POLICY "Anyone can view feedback"
-  ON feedback FOR SELECT
-  USING (true);
+-- teams, booking_locks, bookings, customers, slot_locks, feedback:
+--   RLS enabled, NO anon policies. All access is via the service role.
+--   (whatsapp_number on teams, addresses/PII on bookings/customers, and the
+--   occupancy map on slot_locks must never be anon-readable.) If anon team
+--   availability is ever needed, expose the column-scoped `public_teams`
+--   view from migration 20260728000000, not the base table.
 
 -- Error log: admin only (service_role bypasses RLS)
 -- No public policy needed - service_role handles writes

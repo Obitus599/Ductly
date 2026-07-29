@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 
 interface BookingRow {
   id: string;
@@ -24,7 +25,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getClientIp(request);
   const rl = await checkRateLimit(`manage:${clientIp}`, 30, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many requests." }, { status: 429 });

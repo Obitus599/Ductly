@@ -47,11 +47,14 @@ describe("requireAdmin", () => {
     expect(result!.status).toBe(401);
   });
 
-  it("VALIDATES the admin-token cookie — allows when Supabase confirms it", async () => {
+  it("AUTHORIZES the admin-token cookie — allows when the user carries the admin role", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://proj.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
-    global.fetch = vi.fn().mockResolvedValue({ ok: true }) as never;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: "admin@ductly.ae", app_metadata: { role: "admin" } }),
+    }) as never;
     const req = new NextRequest("http://localhost:3000/api/admin/bookings", {
       headers: { cookie: "admin-token=real-jwt" },
     });
@@ -59,11 +62,45 @@ describe("requireAdmin", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("allows a valid token whose email is in ADMIN_EMAILS", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://proj.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
+    vi.stubEnv("ADMIN_EMAILS", "owner@ductly.ae, second@ductly.ae");
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: "Owner@Ductly.ae", app_metadata: {} }),
+    }) as never;
+    const req = new NextRequest("http://localhost:3000/api/admin/bookings", {
+      headers: { cookie: "admin-token=real-jwt" },
+    });
+    expect(await requireAdmin(req)).toBeNull();
+  });
+
+  it("REJECTS a valid token for a NON-admin user (authenticated ≠ authorized) — 401", async () => {
+    // The crown-jewel fix: a self-registered Supabase user has a valid
+    // token but no admin role and is not on the allowlist.
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://proj.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
+    vi.stubEnv("ADMIN_EMAILS", "owner@ductly.ae");
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: "attacker@evil.tld", role: "authenticated", app_metadata: {} }),
+    }) as never;
+    const req = new NextRequest("http://localhost:3000/api/admin/bookings", {
+      headers: { cookie: "admin-token=valid-but-not-admin" },
+    });
+    const result = await requireAdmin(req);
+    expect(result).not.toBeNull();
+    expect(result!.status).toBe(401);
+  });
+
   it("REJECTS a forged admin-token cookie — presence is not sufficient (401)", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://proj.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
-    global.fetch = vi.fn().mockResolvedValue({ ok: false }) as never;
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }) as never;
     const req = new NextRequest("http://localhost:3000/api/admin/bookings", {
       headers: { cookie: "admin-token=anything" },
     });

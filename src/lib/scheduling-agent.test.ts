@@ -96,10 +96,18 @@ describe("assignTeamToBooking — deterministic fallback", () => {
         ];
         return {
           select: () => ({
-            // Single-booking lookup for address_details (new code path)
+            // Single-booking lookups: address_details (tiebreak) and the
+            // slot_start/slot_end window used for overlap checks.
             eq: () => ({
               returns: () => ({
                 single: vi.fn().mockResolvedValue({ data: { address_details: null }, error: null }),
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    slot_start: "2025-04-15T10:00:00+04:00",
+                    slot_end: "2025-04-15T11:30:00+04:00",
+                  },
+                  error: null,
+                }),
               }),
             }),
             // List query for getExistingBookingsForDate
@@ -176,6 +184,18 @@ describe("assignTeamToBooking — deterministic fallback", () => {
       if (table === "bookings") {
         return {
           select: () => ({
+            eq: () => ({
+              returns: () => ({
+                single: vi.fn().mockResolvedValue({ data: { address_details: null }, error: null }),
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    slot_start: "2025-04-15T10:00:00+04:00",
+                    slot_end: "2025-04-15T11:30:00+04:00",
+                  },
+                  error: null,
+                }),
+              }),
+            }),
             gte: () => ({
               lte: () => ({
                 not: () => ({
@@ -206,6 +226,202 @@ describe("assignTeamToBooking — deterministic fallback", () => {
     await expect(
       assignTeamToBooking("booking-123", "2025-04-15T10:00:00+04:00", "addr")
     ).rejects.toThrow("No teams available");
+  });
+
+  it("treats a team with an OVERLAPPING booking as unavailable, not just an identical start", async () => {
+    // One team, already working 10:00–11:30. The new job is 11:00–12:30,
+    // which overlaps by 30 minutes but starts at a different time — the
+    // old exact-slot_start comparison considered the team free and would
+    // have dispatched one crew to two addresses at once.
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "team_schedules") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                returns: vi.fn().mockResolvedValue({
+                  data: [{ team_id: "team-a", day_of_week: 2, start_time: "08:00", end_time: "18:00" }],
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "teams") {
+        return {
+          select: () => ({
+            in: () => ({
+              returns: vi.fn().mockResolvedValue({ data: [{ id: "team-a", name: "Alpha" }] }),
+            }),
+          }),
+        };
+      }
+      if (table === "bookings") {
+        const bookingData = [
+          {
+            team_id: "team-a",
+            slot_start: "2025-04-15T10:00:00+04:00",
+            slot_end: "2025-04-15T11:30:00+04:00",
+            address: "addr1",
+            address_details: null,
+          },
+        ];
+        return {
+          select: () => ({
+            eq: () => ({
+              returns: () => ({
+                single: vi.fn().mockResolvedValue({ data: { address_details: null }, error: null }),
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    slot_start: "2025-04-15T11:00:00+04:00",
+                    slot_end: "2025-04-15T12:30:00+04:00",
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+            gte: () => ({
+              lte: () => ({
+                not: () => ({
+                  not: () => ({
+                    returns: vi.fn().mockResolvedValue({ data: bookingData }),
+                  }),
+                  returns: vi.fn().mockResolvedValue({ data: bookingData }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "slot_locks") {
+        return {
+          select: () => ({
+            gte: () => ({
+              lte: () => ({ returns: vi.fn().mockResolvedValue({ data: [] }) }),
+            }),
+          }),
+        };
+      }
+      return {};
+    });
+
+    await expect(
+      assignTeamToBooking("booking-999", "2025-04-15T11:00:00+04:00", "addr")
+    ).rejects.toThrow("No teams available");
+  });
+
+  it("falls over to the next-best team when the first is rejected by the overlap constraint", async () => {
+    // team-b is least-booked so it's picked first, but its slot_locks
+    // upsert trips the exclusion constraint (a concurrent booking claimed
+    // it). The assignment must land on team-a rather than fail outright
+    // and leave a paid booking with no crew.
+    let upsertCalls = 0;
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "team_schedules") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                returns: vi.fn().mockResolvedValue({
+                  data: [
+                    { team_id: "team-a", day_of_week: 2, start_time: "08:00", end_time: "18:00" },
+                    { team_id: "team-b", day_of_week: 2, start_time: "08:00", end_time: "18:00" },
+                  ],
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "teams") {
+        return {
+          select: () => ({
+            in: () => ({
+              returns: vi.fn().mockResolvedValue({
+                data: [
+                  { id: "team-a", name: "Alpha" },
+                  { id: "team-b", name: "Bravo" },
+                ],
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "bookings") {
+        const bookingData = [
+          {
+            team_id: "team-a",
+            slot_start: "2025-04-15T08:00:00+04:00",
+            slot_end: "2025-04-15T09:00:00+04:00",
+            address: "addr1",
+            address_details: null,
+          },
+        ];
+        return {
+          select: () => ({
+            eq: () => ({
+              returns: () => ({
+                single: vi.fn().mockResolvedValue({ data: { address_details: null }, error: null }),
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    slot_start: "2025-04-15T10:00:00+04:00",
+                    slot_end: "2025-04-15T11:30:00+04:00",
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+            gte: () => ({
+              lte: () => ({
+                not: () => ({
+                  not: () => ({
+                    returns: vi.fn().mockResolvedValue({ data: bookingData }),
+                  }),
+                  returns: vi.fn().mockResolvedValue({ data: bookingData }),
+                }),
+              }),
+            }),
+          }),
+          update: () => ({
+            eq: () => ({
+              is: () => ({
+                select: () => ({
+                  returns: vi.fn().mockResolvedValue({ data: [{ id: "booking-123" }], error: null }),
+                }),
+              }),
+              eq: vi.fn().mockResolvedValue({ error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === "slot_locks") {
+        return {
+          select: () => ({
+            gte: () => ({
+              lte: () => ({ returns: vi.fn().mockResolvedValue({ data: [] }) }),
+            }),
+          }),
+          upsert: vi.fn().mockImplementation(() => {
+            upsertCalls += 1;
+            return Promise.resolve(
+              upsertCalls === 1
+                ? { error: { message: "conflicting key value violates exclusion constraint" } }
+                : { error: null }
+            );
+          }),
+        };
+      }
+      return {};
+    });
+
+    const result = await assignTeamToBooking(
+      "booking-123",
+      "2025-04-15T10:00:00+04:00",
+      "addr"
+    );
+
+    expect(result.teamId).toBe("team-a");
+    expect(upsertCalls).toBe(2);
   });
 });
 
@@ -256,6 +472,13 @@ describe("assignTeamToBooking — agent path failure → fallback", () => {
             eq: () => ({
               returns: () => ({
                 single: vi.fn().mockResolvedValue({ data: { address_details: null }, error: null }),
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    slot_start: "2025-04-15T10:00:00+04:00",
+                    slot_end: "2025-04-15T11:30:00+04:00",
+                  },
+                  error: null,
+                }),
               }),
             }),
             gte: () => ({

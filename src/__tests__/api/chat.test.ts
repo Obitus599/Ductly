@@ -363,7 +363,10 @@ describe("POST /api/chat", () => {
       );
     });
 
-    it("uses first IP when multiple are in x-forwarded-for", async () => {
+    it("uses the LAST-HOP IP, not the client-supplied leftmost entry", async () => {
+      // Proxies append what they saw, so the leftmost value is whatever the
+      // caller typed. Keying the throttle on it let one attacker mint
+      // unlimited rate-limit buckets; we count back from the right instead.
       mockCheckRateLimit.mockResolvedValue({ allowed: true });
       setupOpenRouterReply("OK");
       await POST(makeRequest(
@@ -371,7 +374,7 @@ describe("POST /api/chat", () => {
         { "x-forwarded-for": "10.0.0.1, 10.0.0.2, 10.0.0.3" }
       ));
       expect(mockCheckRateLimit).toHaveBeenCalledWith(
-        "chat:10.0.0.1",
+        "chat:10.0.0.3",
         expect.any(Number),
         expect.any(Number)
       );

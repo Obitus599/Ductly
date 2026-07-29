@@ -24,7 +24,8 @@ export type OpsAlertEvent =
   | "blackout_removed"
   | "job_not_completed"
   | "payment_orphan"
-  | "invoice_failed";
+  | "invoice_failed"
+  | "refund_required";
 
 /** Human-readable label sent to the template (variable 1). */
 const EVENT_LABELS: Record<OpsAlertEvent, string> = {
@@ -36,6 +37,7 @@ const EVENT_LABELS: Record<OpsAlertEvent, string> = {
   job_not_completed: "Job NOT Completed",
   payment_orphan: "PAID but NOT booked",
   invoice_failed: "Invoice FAILED",
+  refund_required: "REFUND REQUIRED",
 };
 
 export interface OpsAlertDetails {

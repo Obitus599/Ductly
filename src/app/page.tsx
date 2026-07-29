@@ -466,23 +466,20 @@ const PRICING_BTN_STYLE: React.CSSProperties = {
 
 import { PLANS } from "@/lib/pricing";
 
+// Copy lives here; price, tagline and the feature list all come from
+// lib/pricing so the cards, Terms page and chatbot can't disagree.
 const plans = [
-  {
-    name: PLANS.essential.label, price: String(PLANS.essential.rate), tagline: PLANS.essential.tagline,
-    cta: "Select Essential", best: false,
-    features: ["TurboClean\u2122", "Fan coil unit cleaning", "HEPA vacuuming", "Filter cleaning"],
-  },
-  {
-    name: PLANS.signature.label, price: String(PLANS.signature.rate), tagline: PLANS.signature.tagline,
-    cta: "Select Signature", best: true,
-    features: ["TurboClean\u2122", "Filter cleaning", "Fan coil unit cleaning", "Fumigation", "Bio-enzyme disinfection", "Mold remediation treatment", "Black mold remediation"],
-  },
-  {
-    name: PLANS.elite.label, price: String(PLANS.elite.rate), tagline: PLANS.elite.tagline,
-    cta: "Select Elite", best: false,
-    features: ["TurboClean\u2122", "Filter cleaning", "Fan coil unit cleaning", "Fumigation", "Bio-enzyme disinfection", "Mold remediation treatment", "Black mold remediation", "AC unit coil deep clean", "Air quality analysis"],
-  },
-];
+  { ...PLANS.essential, cta: "Select Essential", best: false },
+  { ...PLANS.signature, cta: "Select Signature", best: true },
+  { ...PLANS.elite, cta: "Select Elite", best: false },
+].map((p) => ({
+  name: p.label,
+  price: String(p.rate),
+  tagline: p.tagline,
+  features: p.features,
+  cta: p.cta,
+  best: p.best,
+}));
 
 function PricingSection() {
   return (

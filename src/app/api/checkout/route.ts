@@ -2,15 +2,44 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe, isStripeTestMode } from "@/lib/stripe";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
 import { vatFromNet, VAT_RATE_PERCENT } from "@/lib/vat";
 import { isContactVerified, normalizeIdentifier } from "@/lib/verification";
 import { isUaeMobile } from "@/lib/phone-uae";
 import { PLANS, calcJobDuration } from "@/lib/pricing";
 import type { PlanTier } from "@/lib/pricing";
+import { isValidEmail } from "@/lib/email-validate";
 import { tabbyConfigured, createCheckoutSession, formatTabbyAmount } from "@/lib/tabby";
 
 const PLAN_CONFIG = PLANS;
+
+/**
+ * Abandon a just-created booking when the payment session could never be
+ * started, so the slot frees immediately instead of waiting for the 30-min
+ * stale sweep.
+ *
+ * MUST use a status the `bookings_status_check` constraint accepts. The
+ * previous value here was "failed", which is NOT in the constraint — every
+ * one of these updates was rejected with 23514 and (because the error was
+ * unchecked) silently left the booking `pending`, holding the slot. The
+ * error is now surfaced so a future constraint drift is loud, not silent.
+ */
+async function abandonBooking(bookingId: string, reason: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("bookings")
+    .update({ status: "payment_failed" } as never)
+    .eq("id", bookingId)
+    .eq("status", "pending");
+  if (error) {
+    console.error(`Failed to mark booking ${bookingId} payment_failed (${reason}):`, error);
+    await supabaseAdmin.from("error_log").insert({
+      flow_name: "checkout_abandon_booking",
+      error_message: `Could not release booking ${bookingId}: ${error.message}`,
+      payload: { booking_id: bookingId, reason },
+    } as never);
+  }
+}
 
 /**
  * POST /api/checkout
@@ -19,7 +48,7 @@ const PLAN_CONFIG = PLANS;
  */
 export async function POST(request: NextRequest) {
   // Rate limit: 10 checkout attempts per IP per 5 minutes
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getClientIp(request);
   const rl = await checkRateLimit(`checkout:${clientIp}`, 10, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -78,8 +107,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate email format
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customer_email)) {
+    // Bound the free-form address_details JSON. It is stored verbatim on the
+    // booking row and echoed into dispatch payloads, so an unbounded object
+    // is a storage/DoS vector. A real structured address serialises well
+    // under a few KB.
+    if (address_details !== undefined && address_details !== null) {
+      if (typeof address_details !== "object" || Array.isArray(address_details)) {
+        return NextResponse.json(
+          { error: "Invalid address details." },
+          { status: 400 }
+        );
+      }
+      if (JSON.stringify(address_details).length > 4000) {
+        return NextResponse.json(
+          { error: "Address details too large." },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate email format. Strict on purpose: the value later reaches
+    // DB-side filter expressions and rate-limit keys, so it must not carry
+    // separator/quoting punctuation.
+    if (!isValidEmail(customer_email)) {
       return NextResponse.json(
         { error: "Invalid email address." },
         { status: 400 }
@@ -170,7 +220,7 @@ export async function POST(request: NextRequest) {
 
     // Recalculate job duration & slot_end server-side (don't trust client)
     const planCfg = PLAN_CONFIG[planKey];
-    const jobDurationMins = planCfg.setupMins + planCfg.perThermostatMins * thermostatCount;
+    const jobDurationMins = calcJobDuration(planCfg, thermostatCount);
     const computedSlotEnd = new Date(new Date(slot_start).getTime() + jobDurationMins * 60 * 1000).toISOString();
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -204,6 +254,41 @@ export async function POST(request: NextRequest) {
         { error: "Booking lock expired. Please select a slot again." },
         { status: 409 }
       );
+    }
+
+    // 1b. Re-check schedule blackouts at WRITE time. /api/slots filters
+    //     blacked-out slots out of the picker, but an admin can create a
+    //     blackout in the minutes between the customer picking a slot and
+    //     paying for it — without this the booking is taken and charged
+    //     for a window no team will work. Cheap query, closes the TOCTOU.
+    const { data: writeBlackouts } = await supabaseAdmin
+      .from("schedule_blackouts")
+      .select("team_id, reason")
+      .lt("starts_at", computedSlotEnd)
+      .gt("ends_at", slot_start)
+      .returns<{ team_id: string | null; reason: string }[]>();
+
+    if (writeBlackouts && writeBlackouts.length > 0) {
+      const globalBlackout = writeBlackouts.find((b) => b.team_id === null);
+      const { data: activeTeamRows } = await supabaseAdmin
+        .from("teams")
+        .select("id")
+        .eq("active", true)
+        .returns<{ id: string }[]>();
+      const totalTeams = activeTeamRows?.length ?? 0;
+      const blackedTeamIds = new Set(
+        writeBlackouts.map((b) => b.team_id).filter(Boolean) as string[]
+      );
+
+      if (globalBlackout || (totalTeams > 0 && blackedTeamIds.size >= totalTeams)) {
+        return NextResponse.json(
+          {
+            error:
+              "That time just became unavailable. Please pick another slot.",
+          },
+          { status: 409 }
+        );
+      }
     }
 
     // 2. Upsert customer (refresh consent record on every booking).
@@ -279,10 +364,7 @@ export async function POST(request: NextRequest) {
     //     provider that confirms it is recorded on the row.
     if (useTabby) {
       if (!tabbyConfigured()) {
-        await supabaseAdmin
-          .from("bookings")
-          .update({ status: "failed" } as never)
-          .eq("id", booking.id);
+        await abandonBooking(booking.id, "tabby_not_configured");
         return NextResponse.json(
           { error: "Tabby is not available right now. Please pay by card." },
           { status: 503 }
@@ -312,10 +394,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (!session.ok) {
-        await supabaseAdmin
-          .from("bookings")
-          .update({ status: "failed" } as never)
-          .eq("id", booking.id);
+        await abandonBooking(booking.id, "tabby_session_create_failed");
         return NextResponse.json(
           { error: "Could not start the Tabby payment. Please pay by card." },
           { status: 502 }
@@ -324,11 +403,8 @@ export async function POST(request: NextRequest) {
 
       if (!session.eligible || !session.webUrl) {
         // Customer isn't eligible for Tabby on this order — tell the client
-        // to fall back to card. Leave the booking failed so the slot frees.
-        await supabaseAdmin
-          .from("bookings")
-          .update({ status: "failed" } as never)
-          .eq("id", booking.id);
+        // to fall back to card. Release the booking so the slot frees.
+        await abandonBooking(booking.id, "tabby_not_eligible");
         return NextResponse.json(
           {
             error:
@@ -437,10 +513,7 @@ export async function POST(request: NextRequest) {
     } catch (stripeError) {
       // Clean up orphaned booking so it doesn't block the slot
       console.error("Stripe session creation failed:", stripeError);
-      await supabaseAdmin
-        .from("bookings")
-        .update({ status: "failed" } as never)
-        .eq("id", booking.id);
+      await abandonBooking(booking.id, "stripe_session_create_failed");
       return NextResponse.json(
         { error: "Failed to create payment session." },
         { status: 500 }

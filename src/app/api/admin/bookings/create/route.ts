@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
 
   // Server-side slot_end calculation (never trust client)
   const thermostatCount = Math.max(1, Math.min(50, Math.floor(Number(thermostats) || 1)));
-  const jobDurationMins = planCfg.setupMins + planCfg.perThermostatMins * thermostatCount;
+  const jobDurationMins = calcJobDuration(planCfg, thermostatCount);
   const computedSlotEnd = new Date(slotStartDate.getTime() + jobDurationMins * 60 * 1000).toISOString();
 
   const supabase = supabaseAdmin;
@@ -122,41 +122,66 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Slot collision check — ensure not all teams are occupied at this time
+  // ── Capacity check ────────────────────────────────────────────────────
+  // This must be at least as strict as the customer-facing /api/slots
+  // filter, or an admin can hand-create a booking into a slot the public
+  // site (correctly) refuses to sell. The previous version was weaker in
+  // three separate ways, each of which could overbook the day:
+  //   • it ignored active booking_locks (customers mid-checkout),
+  //   • it skipped unassigned pending bookings entirely,
+  //   • it scored occupancy and blackouts independently, so 1 team busy
+  //     + the other blacked out read as "1 of 2" twice instead of "2 of 2".
+  // Occupied teams, blacked-out teams and held locks are now combined into
+  // ONE consumed-capacity number.
+  const newStart = slotStartDate.getTime();
+  const newEnd = new Date(computedSlotEnd).getTime();
+  const overlapsNewSlot = (start: string, end: string) =>
+    newStart < new Date(end).getTime() && new Date(start).getTime() < newEnd;
+
   const dateStr = slot_start.split("T")[0];
+  const dayStart = dateStr + "T00:00:00" + UAE_TZ_SUFFIX;
+  const dayEnd = dateStr + "T23:59:59" + UAE_TZ_SUFFIX;
+
   const { data: existingBookings } = await supabase
     .from("bookings")
     .select("id, slot_start, slot_end, team_id")
-    .gte("slot_start", dateStr + "T00:00:00" + UAE_TZ_SUFFIX)
-    .lte("slot_start", dateStr + "T23:59:59" + UAE_TZ_SUFFIX)
+    .gte("slot_start", dayStart)
+    .lte("slot_start", dayEnd)
     .in("status", ["pending", "confirmed"])
     .returns<{ id: string; slot_start: string; slot_end: string; team_id: string | null }[]>();
 
-  if (existingBookings && existingBookings.length > 0) {
-    const newStart = slotStartDate.getTime();
-    const newEnd = new Date(computedSlotEnd).getTime();
+  // Consumed capacity, deduped by team where we know the team.
+  const consumedTeamIds = new Set<string>();
+  // Bookings/locks with no team yet still consume ONE unit of capacity
+  // each — the scheduler will have to give them a crew.
+  let unassignedHolds = 0;
 
-    // Deduplicate by team_id — skip unassigned (null) bookings
-    const occupiedTeamIds = new Set<string>();
-    for (const b of existingBookings) {
-      if (!b.team_id) continue; // unassigned bookings don't occupy a team slot
-      const bStart = new Date(b.slot_start).getTime();
-      const bEnd = new Date(b.slot_end).getTime();
-      if (newStart < bEnd && bStart < newEnd) {
-        occupiedTeamIds.add(b.team_id);
-      }
-    }
+  for (const b of existingBookings ?? []) {
+    if (!overlapsNewSlot(b.slot_start, b.slot_end)) continue;
+    if (b.team_id) consumedTeamIds.add(b.team_id);
+    else unassignedHolds += 1;
+  }
 
-    if (occupiedTeamIds.size >= totalTeams) {
-      return NextResponse.json(
-        { error: "All teams are occupied at this time. No available slot for this booking." },
-        { status: 409 }
-      );
+  // Active pre-payment holds from customers currently in checkout.
+  const { data: activeLocks } = await supabase
+    .from("booking_locks")
+    .select("slot_start")
+    .gte("slot_start", dayStart)
+    .lte("slot_start", dayEnd)
+    .gt("expires_at", new Date().toISOString())
+    .returns<{ slot_start: string }[]>();
+
+  for (const l of activeLocks ?? []) {
+    // Locks carry no duration; treat them as occupying the same job
+    // window we're about to book.
+    const lockStart = new Date(l.slot_start).getTime();
+    if (newStart < lockStart + (newEnd - newStart) && lockStart < newEnd) {
+      unassignedHolds += 1;
     }
   }
 
-  // Blackout check — refuse if a global blackout covers this slot, or
-  // (when no remaining teams) every active team has a blackout here.
+  // Blackouts: a global one blocks outright; per-team ones consume that
+  // team's capacity in the SAME tally as bookings above.
   const { data: overlappingBlackouts } = await supabase
     .from("schedule_blackouts")
     .select("team_id, reason")
@@ -164,21 +189,25 @@ export async function POST(request: NextRequest) {
     .gt("ends_at", slot_start)
     .returns<{ team_id: string | null; reason: string }[]>();
 
-  if (overlappingBlackouts && overlappingBlackouts.length > 0) {
-    const globalBlackout = overlappingBlackouts.find((b) => b.team_id === null);
-    if (globalBlackout) {
-      return NextResponse.json(
-        { error: `Time is blocked: ${globalBlackout.reason}` },
-        { status: 409 }
-      );
-    }
-    const blackedTeamIds = new Set(overlappingBlackouts.map((b) => b.team_id).filter(Boolean));
-    if (blackedTeamIds.size >= totalTeams) {
-      return NextResponse.json(
-        { error: "All teams are blocked for this time range." },
-        { status: 409 }
-      );
-    }
+  const globalBlackout = (overlappingBlackouts ?? []).find((b) => b.team_id === null);
+  if (globalBlackout) {
+    return NextResponse.json(
+      { error: `Time is blocked: ${globalBlackout.reason}` },
+      { status: 409 }
+    );
+  }
+  for (const b of overlappingBlackouts ?? []) {
+    if (b.team_id) consumedTeamIds.add(b.team_id);
+  }
+
+  if (consumedTeamIds.size + unassignedHolds >= totalTeams) {
+    return NextResponse.json(
+      {
+        error:
+          "All teams are occupied or blocked at this time. No available slot for this booking.",
+      },
+      { status: 409 }
+    );
   }
 
   // 1. Upsert customer (email optional for phone-in).
@@ -300,18 +329,25 @@ export async function POST(request: NextRequest) {
     const addrDetails = (address_details || null) as Record<string, unknown> | null;
     const priceAed = planCfg.rate * thermostatCount;
 
-    // PDPL: record that customer PII was shared with this team.
-    supabase
+    // PDPL: record that customer PII was shared with this team. AWAITED —
+    // the disclosure below happens unconditionally, so the audit row must
+    // not be fire-and-forget.
+    const { error: accessLogError } = await supabase
       .from("team_data_access")
       .insert({
         team_id: teamResult.teamId,
         booking_id: booking.id,
         shared_fields: ["customer_name", "customer_phone", "address"],
         channel: "n8n_team_dispatch",
-      } as never)
-      .then(({ error }) => {
-        if (error) console.warn("team_data_access insert failed:", error.message);
-      });
+      } as never);
+    if (accessLogError) {
+      console.warn("team_data_access insert failed:", accessLogError.message);
+      await supabase.from("error_log").insert({
+        flow_name: "team_data_access_audit",
+        error_message: `PII shared with team ${teamResult.teamId} for booking ${booking.id} but the PDPL access record failed: ${accessLogError.message}`,
+        payload: { booking_id: booking.id, team_id: teamResult.teamId },
+      } as never);
+    }
 
     fireN8nWebhook("team_dispatch", n8nDispatchUrl, {
       event: "team_dispatch",

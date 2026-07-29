@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
 const AGENT_TIMEOUT_MS = 30_000;
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const UAE_OFFSET_MS = 4 * 60 * 60 * 1000; // UTC+4
+const DEFAULT_JOB_DURATION_MINS = 90;
 
 /** Get day-of-week in UAE local time (UTC+4), regardless of server timezone */
 export function uaeDayOfWeek(isoTimestamp: string): number {
@@ -29,6 +30,7 @@ interface TeamWorkload {
 interface SlotLockInfo {
   team_id: string;
   slot_start: string;
+  slot_end: string;
 }
 
 interface BookingInfo {
@@ -141,12 +143,56 @@ async function getSlotLocksForDate(date: string): Promise<SlotLockInfo[]> {
   const supabase = supabaseAdmin;
   const { data } = await supabase
     .from("slot_locks")
-    .select("team_id, slot_start")
+    .select("team_id, slot_start, slot_end")
     .gte("slot_start", `${date}T00:00:00+04:00`)
     .lte("slot_start", `${date}T23:59:59+04:00`)
     .returns<SlotLockInfo[]>();
 
   return data || [];
+}
+
+/** Half-open [start, end) overlap — touching intervals do NOT overlap. */
+function overlaps(
+  aStart: number,
+  aEnd: number,
+  bStart: number,
+  bEnd: number
+): boolean {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+/**
+ * Read the booking's real slot window. slot_end is authoritative on the
+ * booking row (computed server-side from plan + thermostats at checkout),
+ * so we never take it from a caller — least of all from the LLM's tool
+ * arguments.
+ */
+async function getBookingWindow(
+  bookingId: string,
+  slotStartFallback: string
+): Promise<{ startMs: number; endMs: number; slotStart: string; slotEnd: string }> {
+  const { data } = await supabaseAdmin
+    .from("bookings")
+    .select("slot_start, slot_end")
+    .eq("id", bookingId)
+    .returns<{ slot_start: string; slot_end: string }[]>()
+    .maybeSingle();
+
+  const slotStart = data?.slot_start || slotStartFallback;
+  const startMs = new Date(slotStart).getTime();
+  // A missing slot_end shouldn't collapse the range to zero — an empty
+  // range overlaps nothing, which would silently disable the exclusion
+  // constraint for this row.
+  const endMs = data?.slot_end
+    ? new Date(data.slot_end).getTime()
+    : startMs + DEFAULT_JOB_DURATION_MINS * 60 * 1000;
+
+  return {
+    startMs,
+    endMs,
+    slotStart,
+    slotEnd: new Date(endMs).toISOString(),
+  };
 }
 
 async function assignBookingToTeam(
@@ -155,6 +201,7 @@ async function assignBookingToTeam(
   slotStart: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = supabaseAdmin;
+  const window = await getBookingWindow(bookingId, slotStart);
 
   // Conditional update: only assign team_id if it's still unassigned.
   // If an admin manually set it between checkout and now, we yield —
@@ -187,19 +234,21 @@ async function assignBookingToTeam(
     .upsert(
       {
         team_id: teamId,
-        slot_start: slotStart,
+        slot_start: window.slotStart,
+        slot_end: window.slotEnd,
         booking_id: bookingId,
       } as never,
       { onConflict: "booking_id" }
     );
 
   if (lockError) {
-    // Most likely a UNIQUE(team_id, slot_start) violation — another
-    // booking grabbed this exact team+slot concurrently. We already
-    // claimed team_id above; roll it back so the booking isn't left
-    // "assigned" to a double-booked team with NO slot_lock (which would
-    // otherwise stay confirmed-but-undispatched). Returning failure lets
-    // the caller fall back / surface it via error_log for reassignment.
+    // Either UNIQUE(team_id, slot_start) or the slot_locks_no_overlap
+    // exclusion constraint (23P01) — another booking holds this team for
+    // an overlapping window. We already claimed team_id above; roll it
+    // back so the booking isn't left "assigned" to a double-booked team
+    // with NO slot_lock (which would otherwise stay
+    // confirmed-but-undispatched). Returning failure lets the caller try
+    // the next-best team, or surface it via error_log for reassignment.
     await supabase
       .from("bookings")
       .update({ team_id: null } as never)
@@ -346,18 +395,35 @@ async function deterministicAssign(
   const existingBookings = await getExistingBookingsForDate(date);
   const slotLocks = await getSlotLocksForDate(date);
 
-  // Get teams that are NOT already locked for this slot
-  // Compare by epoch ms to handle different timezone offset formats
-  const slotStartMs = new Date(slotStart).getTime();
-  const lockedTeamIds = new Set(
-    slotLocks
-      .filter((l) => new Date(l.slot_start).getTime() === slotStartMs)
-      .map((l) => l.team_id)
+  // The booking's REAL window, not just its start. Comparing only
+  // slot_start meant a team already working 10:00–11:30 looked free for a
+  // 10:30 job — same team, two overlapping addresses.
+  const { startMs: slotStartMs, endMs: slotEndMs } = await getBookingWindow(
+    bookingId,
+    slotStart
   );
+
+  // A team is unavailable if it holds an OVERLAPPING slot_lock, or already
+  // has an overlapping booking on the day. (Epoch ms comparison keeps
+  // differing timezone-offset formats equivalent.)
+  const busyTeamIds = new Set<string>();
+  for (const l of slotLocks) {
+    const lStart = new Date(l.slot_start).getTime();
+    const lEnd = l.slot_end
+      ? new Date(l.slot_end).getTime()
+      : lStart + DEFAULT_JOB_DURATION_MINS * 60 * 1000;
+    if (overlaps(slotStartMs, slotEndMs, lStart, lEnd)) busyTeamIds.add(l.team_id);
+  }
+  for (const b of existingBookings) {
+    if (!b.team_id) continue;
+    const bStart = new Date(b.slot_start).getTime();
+    const bEnd = new Date(b.slot_end).getTime();
+    if (overlaps(slotStartMs, slotEndMs, bStart, bEnd)) busyTeamIds.add(b.team_id);
+  }
 
   const availableTeams = schedules
     .map((s) => s.team_id)
-    .filter((id) => !lockedTeamIds.has(id));
+    .filter((id) => !busyTeamIds.has(id));
 
   if (availableTeams.length === 0) {
     throw new Error("No teams available for this slot");
@@ -415,19 +481,30 @@ async function deterministicAssign(
     if (a[1].count !== b[1].count) return a[1].count - b[1].count;
     return a[1].distanceKm - b[1].distanceKm;
   });
-  const chosenTeamId = sorted[0][0];
 
-  const result = await assignBookingToTeam(bookingId, chosenTeamId, slotStart);
-  if (!result.success) {
-    throw new Error(`Fallback assignment failed: ${result.error}`);
+  // Walk the ranked list. Our availability read is a snapshot; the
+  // slot_locks overlap constraint is the real arbiter, and it can reject
+  // our first pick if a concurrent booking claimed that team in between.
+  // Falling over to the next-best team beats failing the whole assignment
+  // and leaving a paid booking with no crew.
+  let lastError = "no candidates";
+  for (const [candidateId, score] of sorted) {
+    const result = await assignBookingToTeam(bookingId, candidateId, slotStart);
+    if (result.success) {
+      console.log(
+        `Deterministic fallback picked ${candidateId} (count=${score.count}, distance=${score.distanceKm.toFixed(
+          1
+        )}km)`
+      );
+      return { teamId: candidateId, method: "fallback" };
+    }
+    lastError = result.error ?? "unknown";
+    console.warn(
+      `Fallback candidate ${candidateId} rejected (${lastError}) — trying next team`
+    );
   }
 
-  console.log(
-    `Deterministic fallback picked ${chosenTeamId} (count=${sorted[0][1].count}, distance=${sorted[0][1].distanceKm.toFixed(
-      1
-    )}km)`
-  );
-  return { teamId: chosenTeamId, method: "fallback" };
+  throw new Error(`Fallback assignment failed: ${lastError}`);
 }
 
 // ─── Main Agent Function ─────────────────────────────────────────────────────

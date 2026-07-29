@@ -1,5 +1,25 @@
 import Link from "next/link";
 import Image from "next/image";
+import { PLANS } from "@/lib/pricing";
+
+/**
+ * Plan pricing is read from lib/pricing (the same source checkout charges
+ * from) rather than typed into the copy. These are contractual prices —
+ * a hardcoded number that drifts from what the customer is actually
+ * billed is a consumer-protection problem, not a typo.
+ */
+const PLAN_TERMS: { key: keyof typeof PLANS; description: string }[] = [
+  { key: "essential", description: "Standard duct cleaning with inspection report." },
+  {
+    key: "signature",
+    description: "Deep cleaning with sanitization and before/after documentation.",
+  },
+  {
+    key: "elite",
+    description:
+      "Premium service including mold treatment, coil cleaning, and extended warranty.",
+  },
+];
 
 export const metadata = {
   title: "Terms of Service | DUCTly",
@@ -52,9 +72,14 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-[20px] font-medium mb-3" style={{ fontFamily: "var(--font-heading)", color: "rgb(61,61,61)" }}>3. Service Plans</h2>
             <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Essential Plan (AED 349/thermostat):</strong> Standard duct cleaning with inspection report.</li>
-              <li><strong>Signature Plan (AED 549/thermostat):</strong> Deep cleaning with sanitization and before/after documentation.</li>
-              <li><strong>Elite Plan (AED 649/thermostat):</strong> Premium service including mold treatment, coil cleaning, and extended warranty.</li>
+              {PLAN_TERMS.map(({ key, description }) => (
+                <li key={key}>
+                  <strong>
+                    {PLANS[key].label} Plan (AED {PLANS[key].rate}/thermostat):
+                  </strong>{" "}
+                  {description}
+                </li>
+              ))}
             </ul>
           </section>
 

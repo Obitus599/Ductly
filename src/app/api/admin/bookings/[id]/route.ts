@@ -107,9 +107,9 @@ export async function PATCH(
   // Fetch current booking
   const { data: booking, error: fetchError } = await supabase
     .from("bookings")
-    .select("id, status, team_id, slot_start, customer_id")
+    .select("id, status, team_id, slot_start, slot_end, customer_id")
     .eq("id", id)
-    .returns<{ id: string; status: string; team_id: string | null; slot_start: string; customer_id: string }[]>()
+    .returns<{ id: string; status: string; team_id: string | null; slot_start: string; slot_end: string | null; customer_id: string }[]>()
     .single();
 
   if (fetchError || !booking) {
@@ -170,18 +170,37 @@ export async function PATCH(
 
     // Slot lock: upsert by booking_id so we never produce duplicates
     // even if the agent and admin race. Unique constraint on
-    // slot_locks(booking_id) enforces invariant at the DB level.
+    // slot_locks(booking_id) enforces invariant at the DB level, and the
+    // slot_locks_no_overlap exclusion constraint rejects reassigning a
+    // team that's already booked for an overlapping window — surfaced to
+    // the admin rather than silently double-booking the crew.
     if (newTeamId && booking.slot_start) {
-      await supabase
+      const lockEnd =
+        booking.slot_end ??
+        new Date(new Date(booking.slot_start).getTime() + 90 * 60 * 1000).toISOString();
+
+      const { error: lockError } = await supabase
         .from("slot_locks")
         .upsert(
           {
             team_id: newTeamId,
             slot_start: booking.slot_start,
+            slot_end: lockEnd,
             booking_id: id,
           } as never,
           { onConflict: "booking_id" }
         );
+
+      if (lockError) {
+        return NextResponse.json(
+          {
+            error:
+              "That team is already booked for an overlapping time. Pick a different team or move the booking.",
+            detail: lockError.message,
+          },
+          { status: 409 }
+        );
+      }
     } else {
       // Clearing the team — remove the lock.
       await supabase

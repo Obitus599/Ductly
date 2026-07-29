@@ -133,6 +133,7 @@ export type Database = {
           id: string;
           team_id: string;
           slot_start: string;
+          slot_end: string;
           booking_id: string;
           created_at: string;
         };
@@ -140,6 +141,7 @@ export type Database = {
           id?: string;
           team_id: string;
           slot_start: string;
+          slot_end: string;
           booking_id: string;
           created_at?: string;
         };
@@ -147,6 +149,7 @@ export type Database = {
           id?: string;
           team_id?: string;
           slot_start?: string;
+          slot_end?: string;
           booking_id?: string;
           created_at?: string;
         };

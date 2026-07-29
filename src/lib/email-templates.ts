@@ -13,7 +13,10 @@ export interface RenderedEmail {
 }
 
 export function renderVerificationEmail(code: string, ttlMinutes: number): RenderedEmail {
-  const subject = `Your Ductly verification code: ${code}`;
+  // The code stays OUT of the subject line. Subjects show up in lock-screen
+  // and smart-watch notification previews, in mail-client list views over
+  // someone's shoulder, and in mail-server logs — all places the body isn't.
+  const subject = "Your Ductly verification code";
 
   const html = `<!DOCTYPE html>
 <html>

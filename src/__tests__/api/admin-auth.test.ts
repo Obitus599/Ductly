@@ -50,13 +50,29 @@ describe("POST /api/admin/auth (login)", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 200 and sets cookies on successful login", async () => {
+  it("returns 403 when the credentials are valid but the user is NOT an admin", async () => {
+    // Authenticated ≠ authorized: a self-registered Supabase user signing
+    // in here must not receive an admin cookie.
+    mockSignIn.mockResolvedValue({
+      data: {
+        session: { access_token: "jwt", refresh_token: "ref" },
+        user: { email: "customer@evil.tld", app_metadata: {} },
+      },
+      error: null,
+    });
+    const res = await POST(makePostRequest({ email: "customer@evil.tld", password: "correct" }));
+    expect(res.status).toBe(403);
+    expect(res.headers.getSetCookie().some((c: string) => c.includes("admin-token=jwt"))).toBe(false);
+  });
+
+  it("returns 200 and sets cookies for an admin (role claim) login", async () => {
     mockSignIn.mockResolvedValue({
       data: {
         session: {
           access_token: "jwt-access-token",
           refresh_token: "jwt-refresh-token",
         },
+        user: { email: "admin@test.com", app_metadata: { role: "admin" } },
       },
       error: null,
     });

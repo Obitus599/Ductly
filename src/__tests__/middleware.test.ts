@@ -64,11 +64,24 @@ describe("middleware", () => {
     expect(res.headers.get("location")).toContain("/admin/login");
   });
 
-  it("allows /admin with valid token (Supabase returns 200)", async () => {
-    mockFetch.mockResolvedValue({ ok: true });
+  it("allows /admin with a valid ADMIN token (role check passes)", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: "admin@ductly.ae", app_metadata: { role: "admin" } }),
+    });
     const res = await middleware(makeRequest("/admin", "valid-jwt"));
     // Should pass through (not redirect)
     expect(res.status).toBe(200);
+  });
+
+  it("redirects a valid but NON-admin token to login (authenticated ≠ authorized)", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: "customer@evil.tld", app_metadata: {} }),
+    });
+    const res = await middleware(makeRequest("/admin", "valid-non-admin-jwt"));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/admin/login");
   });
 
   it("redirects to login and clears cookie when token is invalid", async () => {

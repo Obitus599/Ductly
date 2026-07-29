@@ -12,7 +12,7 @@ vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
 }));
 
-import { GET } from "@/app/api/me/export/route";
+import { GET, POST } from "@/app/api/me/export/route";
 
 function makeRequest(token?: string): NextRequest {
   const url = token
@@ -139,6 +139,18 @@ describe("GET /api/me/export", () => {
           }),
         };
       }
+      if (table === "team_data_access") {
+        return {
+          select: () => ({
+            in: () => ({
+              returns: () =>
+                Promise.resolve({
+                  data: [{ id: "tda-1", team_id: "team-1", booking_id: "book-1" }],
+                }),
+            }),
+          }),
+        };
+      }
       return {};
     });
 
@@ -146,6 +158,8 @@ describe("GET /api/me/export", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("application/json");
     expect(res.headers.get("Content-Disposition")).toContain("attachment");
+    // Keeps a token passed in the query string out of the Referer header.
+    expect(res.headers.get("Referrer-Policy")).toBe("no-referrer");
 
     const body = JSON.parse(await res.text());
     expect(body.customer.email).toBe("alex@test.com");
@@ -154,7 +168,37 @@ describe("GET /api/me/export", () => {
     expect(body.feedback).toHaveLength(1);
     expect(body.contact_submissions).toHaveLength(1);
     expect(body.newsletter_subscription).toEqual({ id: "ns-1", active: true });
+    // PDPL Art. 17 also covers who the data was disclosed to.
+    expect(body.disclosures_to_service_teams).toHaveLength(1);
     expect(body.notice).toMatch(/PDPL/i);
     expect(body.exported_at).toBeDefined();
+  });
+
+  it("accepts the token in a POST body (keeps it out of the URL)", async () => {
+    let customerCall = 0;
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === "bookings") {
+        return customerCall === 0
+          ? (customerCall++, mockTokenLookup("cust-1"))
+          : listMock([]);
+      }
+      if (table === "customers")
+        return mockCustomerLookup({ id: "cust-1", email: "alex@test.com", deleted_at: null });
+      if (table === "feedback") return listMock([]);
+      if (table === "contact_submissions") return listMock([]);
+      if (table === "newsletter_subscribers") return singleMaybeMock(null);
+      return {};
+    });
+
+    const res = await POST(
+      new NextRequest("http://localhost:3000/api/me/export", {
+        method: "POST",
+        body: JSON.stringify({ token: VALID_TOKEN }),
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    expect(res.status).toBe(200);
+    const body = JSON.parse(await res.text());
+    expect(body.customer.email).toBe("alex@test.com");
   });
 });

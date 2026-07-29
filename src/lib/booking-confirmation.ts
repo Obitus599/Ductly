@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
 import { assignTeamToBooking } from "@/lib/scheduling-agent";
 import { fireN8nWebhook } from "@/lib/n8n";
 import { fireOpsAlert } from "@/lib/ops-alert";
+import { isSlotFulfillable } from "@/lib/slot-capacity";
 import {
   buildMapsLink,
   formatSlotForDispatch,
@@ -38,7 +39,7 @@ export interface ConfirmPaidBookingInput {
 export interface ConfirmPaidBookingResult {
   /** true iff THIS call transitioned the booking to confirmed. */
   confirmed: boolean;
-  reason?: "already_confirmed" | "not_confirmable";
+  reason?: "already_confirmed" | "not_confirmable" | "slot_unavailable";
   teamId?: string;
 }
 
@@ -62,18 +63,56 @@ export async function confirmPaidBooking(
   // Idempotency fast-path: skip if already confirmed.
   const { data: existing } = await supabase
     .from("bookings")
-    .select("status")
+    .select("status, slot_end")
     .eq("id", bookingId)
-    .returns<{ status: string }[]>()
+    .returns<{ status: string; slot_end: string }[]>()
     .single();
 
   if (existing?.status === "confirmed") {
     return { confirmed: false, reason: "already_confirmed" };
   }
 
+  // Recovering an EXPIRED booking (the stale sweep flipped it, then a slow
+  // payment settled) is only safe if the slot is still in the future AND
+  // still has a free team. A late settle — days later via the reconciler,
+  // or after the slot was resold to someone else — must NOT confirm: that
+  // would charge a customer for a slot no crew can serve, or one already in
+  // the past. The caller refunds/voids on this reason.
+  if (existing?.status === "expired") {
+    const fulfillable = await isSlotFulfillable(
+      slotStart,
+      existing.slot_end || slotStart,
+      bookingId
+    );
+    if (!fulfillable.ok) {
+      await supabase.from("error_log").insert({
+        flow_name: "confirm_slot_unavailable",
+        error_message: `Verified ${provider} payment ${paymentRef} arrived for expired booking ${bookingId} but the slot is no longer serviceable (${fulfillable.reason}) — REFUND REQUIRED`,
+        payload: { booking_id: bookingId, payment_ref: paymentRef, provider, reason: fulfillable.reason },
+      } as never);
+      fireOpsAlert("refund_required", {
+        bookingId,
+        customerName: fallbackName || fallbackEmail || "",
+        customerPhone: fallbackPhone || "",
+        slotStart,
+        address: address || "",
+        extra: `${provider} payment ${paymentRef} · slot no longer serviceable (${fulfillable.reason})`,
+        source: "expired_slot_settlement",
+      });
+      return { confirmed: false, reason: "slot_unavailable" };
+    }
+  }
+
   // Compare-and-swap: only confirm from a PRE-confirmation state. A late/
   // duplicate/out-of-order call that finds the booking already finalized
   // or cancelled matches 0 rows and skips assignment + dispatch entirely.
+  //
+  // `expired` is in the set deliberately. The stale-booking sweep flips
+  // pending → expired on a timer, and a slow-but-successful payment can
+  // land on the wrong side of it. Every caller of this function has
+  // ALREADY verified the money server-side (Stripe signature, or Tabby
+  // retrieve+capture), so refusing to confirm here doesn't undo the
+  // charge — it just loses the booking while keeping the money.
   const manageToken = `bk_${crypto.randomBytes(24).toString("hex")}`;
   const providerFields =
     provider === "tabby"
@@ -89,11 +128,24 @@ export async function confirmPaidBooking(
       ...providerFields,
     } as never)
     .eq("id", bookingId)
-    .in("status", ["pending", "payment_failed"])
+    .in("status", ["pending", "payment_failed", "expired"])
     .select("id")
     .returns<{ id: string }[]>();
 
   if (!confirmedRows || confirmedRows.length === 0) {
+    // Money was verified but the booking can't be confirmed (cancelled,
+    // completed, …). That's a captured-but-unfulfillable charge and needs
+    // a human to refund it — never let it pass silently.
+    await supabase.from("error_log").insert({
+      flow_name: "confirm_not_confirmable",
+      error_message: `Verified ${provider} payment ${paymentRef} could not confirm booking ${bookingId} (status=${existing?.status ?? "unknown"}) — REFUND REQUIRED`,
+      payload: {
+        booking_id: bookingId,
+        payment_ref: paymentRef,
+        provider,
+        booking_status: existing?.status ?? null,
+      },
+    } as never);
     return { confirmed: false, reason: "not_confirmable" };
   }
 
@@ -168,18 +220,26 @@ export async function confirmPaidBooking(
         ? String(Math.round(bookingData.price_net_fils / 100))
         : "";
 
-      // PDPL: record that customer PII was shared with this team.
-      supabase
+      // PDPL: record that customer PII was shared with this team. AWAITED
+      // — the disclosure below is unconditional, so a fire-and-forget
+      // audit row means we can share PII and have no record that we did.
+      // A failed audit write is itself escalated to error_log.
+      const { error: accessLogError } = await supabase
         .from("team_data_access")
         .insert({
           team_id: result.teamId,
           booking_id: bookingId,
           shared_fields: ["customer_name", "customer_phone", "address"],
           channel: "n8n_team_dispatch",
-        } as never)
-        .then(({ error }) => {
-          if (error) console.warn("team_data_access insert failed:", error.message);
-        });
+        } as never);
+      if (accessLogError) {
+        console.warn("team_data_access insert failed:", accessLogError.message);
+        await supabase.from("error_log").insert({
+          flow_name: "team_data_access_audit",
+          error_message: `PII shared with team ${result.teamId} for booking ${bookingId} but the PDPL access record failed: ${accessLogError.message}`,
+          payload: { booking_id: bookingId, team_id: result.teamId },
+        } as never);
+      }
 
       fireN8nWebhook("team_dispatch", n8nDispatchUrl, {
         event: "team_dispatch",

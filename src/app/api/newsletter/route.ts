@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
+import { isValidEmail } from "@/lib/email-validate";
 
 /**
  * POST /api/newsletter
@@ -8,7 +10,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
  * Body: { email: string }
  */
 export async function POST(request: NextRequest) {
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getClientIp(request);
   const rl = await checkRateLimit(`newsletter:${clientIp}`, 5, 5 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -21,7 +23,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email } = body;
 
-    if (!email?.trim() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    if (!isValidEmail(email)) {
       return NextResponse.json(
         { error: "Valid email is required." },
         { status: 400 }

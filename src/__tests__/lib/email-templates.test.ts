@@ -4,10 +4,16 @@ import { renderVerificationEmail } from "@/lib/email-templates";
 describe("renderVerificationEmail", () => {
   const { subject, html, text } = renderVerificationEmail("482913", 10);
 
-  it("interpolates the code into subject, html and text", () => {
-    expect(subject).toContain("482913");
+  it("interpolates the code into html and text", () => {
     expect(html).toContain("482913");
     expect(text).toContain("482913");
+  });
+
+  it("keeps the code OUT of the subject line", () => {
+    // Subjects surface in lock-screen previews, mail-list views and mail
+    // server logs — all places the body doesn't reach.
+    expect(subject).not.toContain("482913");
+    expect(subject).toBe("Your Ductly verification code");
   });
 
   it("interpolates the TTL", () => {

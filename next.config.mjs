@@ -1,4 +1,20 @@
 /** @type {import('next').NextConfig} */
+
+// 'unsafe-eval' is only needed by the dev HMR runtime. Dropping it in
+// production removes a class of eval-based script execution; Stripe.js,
+// Google Maps JS v3, and GA4 do not require it. ('unsafe-inline' still
+// remains for scripts — removing it cleanly needs per-request nonces, a
+// tracked follow-up. Smoke-test the address picker + checkout after any
+// change to this policy.)
+const isDev = process.env.NODE_ENV !== "production";
+const scriptSrc = [
+  "script-src 'self' 'unsafe-inline'",
+  isDev ? "'unsafe-eval'" : "",
+  "https://js.stripe.com https://maps.googleapis.com https://maps.gstatic.com https://www.googletagmanager.com https://www.google-analytics.com",
+]
+  .filter(Boolean)
+  .join(" ");
+
 const nextConfig = {
   async headers() {
     return [
@@ -33,7 +49,7 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://maps.googleapis.com https://maps.gstatic.com https://www.googletagmanager.com https://www.google-analytics.com",
+              scriptSrc,
               "worker-src 'self' blob: https://maps.googleapis.com https://maps.gstatic.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com https://cdn.fontshare.com",
               "font-src 'self' https://fonts.gstatic.com https://api.fontshare.com https://cdn.fontshare.com",

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { getTravelTime } from "@/lib/travel-math";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
+import { expireStaleBookings } from "@/lib/maintenance";
 import {
   type BookingRecord,
   type LockRecord,
@@ -16,9 +18,12 @@ const DEFAULT_JOB_DURATION_MINS = 90;
 const MINIMUM_TRAVEL_BUFFER_MINS = 20;
 const DAY_START_HOUR = 8;
 const DAY_END_HOUR = 18;
-const STALE_BOOKING_TTL_MINS = 15;
 
-// Throttle: only run stale booking cleanup once per 60 seconds
+// Opportunistic stale-booking sweep, throttled to once per 60s. This is a
+// convenience only — the authoritative schedule is POST /api/cron/cleanup,
+// because retention deletes and Tabby reconciliation must also run on days
+// with no booking-page traffic. The TTL itself lives in lib/maintenance so
+// the two paths can't drift apart.
 let lastCleanupTime = 0;
 const CLEANUP_THROTTLE_MS = 60_000;
 
@@ -180,7 +185,7 @@ export async function GET(request: NextRequest) {
   // Rate-limit this endpoint — it does Google Maps Distance Matrix
   // calls which cost real money. Legitimate UI doesn't poll faster
   // than ~1/sec, so 60/min is generous.
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getClientIp(request);
   const rl = await checkRateLimit(`slots:${clientIp}`, 60, 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -224,16 +229,11 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = supabaseAdmin;
 
-    // Cleanup: expire pending bookings older than 15 min (throttled to once per 60s)
+    // Cleanup: expire abandoned pending bookings (throttled to once per 60s)
     const now = Date.now();
     if (now - lastCleanupTime > CLEANUP_THROTTLE_MS) {
       lastCleanupTime = now;
-      const staleCutoff = new Date(now - STALE_BOOKING_TTL_MINS * 60 * 1000).toISOString();
-      await supabase
-        .from("bookings")
-        .update({ status: "expired" } as never)
-        .eq("status", "pending")
-        .lt("created_at", staleCutoff);
+      await expireStaleBookings();
     }
 
     // Parse date as UAE local — "T12:00:00+04:00" ensures correct day-of-week
