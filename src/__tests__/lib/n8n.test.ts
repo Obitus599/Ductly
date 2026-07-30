@@ -43,7 +43,7 @@ describe("fireN8nWebhook", () => {
     expect(url).toBe("https://n8n.example.com/webhook");
     expect(options.method).toBe("POST");
     expect(options.headers["Content-Type"]).toBe("application/json");
-    expect(JSON.parse(options.body)).toEqual({ booking_id: "book-1" });
+    expect(JSON.parse(options.body)).toEqual({ body: { booking_id: "book-1" } });
     expect(options.signal).toBeInstanceOf(AbortSignal);
   });
 
