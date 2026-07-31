@@ -22,8 +22,8 @@ import {
  *
  * Generates a 6-digit code, stores its hash, and delivers it — phone via
  * WhatsApp (Twilio), email straight over SMTP (rendered in-app; falls back
- * to the n8n relay only if SMTP isn't configured). Generic { ok: true }
- * response (we don't leak delivery internals).
+ * to the n8n relay if SMTP fails or the domain isn't verified).
+ * Generic { ok: true } response (we don't leak delivery internals).
  */
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -105,11 +105,21 @@ export async function POST(request: NextRequest) {
       text: mail.text,
     });
     if (!result.ok) {
-      console.error("verify email send failed:", result.error);
-      return NextResponse.json({ error: "Could not send the verification code." }, { status: 502 });
+      console.error("verify email send failed, trying n8n fallback:", result.error);
+      // Fallback to n8n relay when Resend domain is not verified or SMTP fails.
+      const url = process.env.N8N_WEBHOOK_VERIFY_EMAIL;
+      if (!url) {
+        return NextResponse.json({ error: "Could not send the verification code." }, { status: 502 });
+      }
+      fireN8nWebhook("verify_email", url, {
+        event: "verify_email",
+        email: identifier,
+        code,
+        ttl_minutes: CODE_TTL_MINUTES,
+      });
     }
   } else {
-    // Fallback: the legacy n8n relay, only if SMTP isn't configured yet.
+    // No SMTP configured; use the n8n relay as the primary sender.
     const url = process.env.N8N_WEBHOOK_VERIFY_EMAIL;
     if (!url) {
       return NextResponse.json({ error: "Email verification is not configured." }, { status: 503 });
