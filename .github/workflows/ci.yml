@@ -114,22 +114,10 @@ jobs:
             git reset --hard origin/main
             npm ci
             npx next build
-            # Reload the running app. The served process is managed by pm2
-            # (confirmed 2026-06: env/code changes only took effect after a
-            # pm2 restart; touching tmp/restart.txt alone was a no-op). We do
-            # BOTH so whichever front is actually live gets picked up:
-            #   1. pm2 restart — the confirmed reload path for the app process
-            #   2. touch tmp/restart.txt — harmless belt-and-suspenders in case
-            #      a Passenger front is still in play for any vhost.
-            pm2 restart ductly-production --update-env || echo "pm2 restart failed (continuing)"
+            pm2 restart ductly-production --update-env
             mkdir -p tmp && touch tmp/restart.txt
 
       - name: Post-deploy health check
-        # Polls the live site's /api/health endpoint until it returns 200
-        # (or 503 with a well-formed body, which means the app booted but
-        # a downstream is degraded — still a successful deploy). Fails
-        # the workflow if the site never responds within ~60s, which
-        # is the signal that the new build crashed at startup.
         run: |
           set -e
           URL="https://ductly.ae/api/health"

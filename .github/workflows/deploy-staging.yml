@@ -1,8 +1,9 @@
-name: Deploy Staging
+name: Deploy to Staging
 
 on:
   push:
     branches: [staging]
+  workflow_dispatch:
 
 concurrency:
   group: deploy-staging
@@ -12,11 +13,8 @@ jobs:
   deploy:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    concurrency:
-      group: deploy-staging
-      cancel-in-progress: false
     steps:
-      - name: SSH and deploy staging
+      - name: SSH and deploy
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -50,5 +48,5 @@ jobs:
             echo "Attempt $i: HTTP $code (retrying in 5s)"
             sleep 5
           done
-          echo "Health check FAILED — site did not respond with 200 or 503 within 60s"
+          echo "Health check FAILED — staging did not respond with 200 or 503 within 60s"
           exit 1
