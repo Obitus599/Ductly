@@ -121,7 +121,7 @@ jobs:
             #   1. pm2 restart — the confirmed reload path for the app process
             #   2. touch tmp/restart.txt — harmless belt-and-suspenders in case
             #      a Passenger front is still in play for any vhost.
-            pm2 restart ductly --update-env || echo "pm2 restart failed (continuing)"
+            pm2 restart ductly-production --update-env
             mkdir -p tmp && touch tmp/restart.txt
 
       - name: Post-deploy health check
@@ -132,7 +132,7 @@ jobs:
         # is the signal that the new build crashed at startup.
         run: |
           set -e
-          URL="https://staging.ductly.ae/api/health"
+          URL="https://ductly.ae/api/health"
           echo "Polling $URL for up to 60s..."
           for i in $(seq 1 12); do
             code=$(curl -sk -o /tmp/health.json -w "%{http_code}" --max-time 5 "$URL" || echo "000")
