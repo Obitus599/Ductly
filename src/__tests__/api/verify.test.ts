@@ -150,11 +150,15 @@ describe("POST /api/verify/send", () => {
     expect(opts.text).toContain("123456");
   });
 
-  it("502s when the SMTP send fails", async () => {
+  it("falls back to n8n when the SMTP send fails", async () => {
     mockEmailConfigured.mockReturnValue(true);
     mockSendEmail.mockResolvedValueOnce({ ok: false, error: "smtp down" });
     const res = await sendPOST(req(SEND_URL, { channel: "email", identifier: "alex@test.com" }));
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(200);
+    expect(mockFireN8n).toHaveBeenCalledTimes(1);
+    const [, url, payload] = mockFireN8n.mock.calls[0];
+    expect(url).toContain("verify-email");
+    expect(payload).toMatchObject({ email: "alex@test.com", code: "123456" });
   });
 
   it("falls back to the n8n flow for an email code when SMTP is unset", async () => {
