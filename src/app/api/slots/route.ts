@@ -270,8 +270,8 @@ export async function GET(request: NextRequest) {
     // ── 3. Query existing bookings for this date (non-cancelled) ─────────
 
     // UAE midnight = 20:00 UTC previous day. Use +04:00 offset for correct range.
-    const dayStart = `${date}T00:00:00+04:00`;
-    const dayEnd = `${date}T23:59:59+04:00`;
+    const dayStart = new Date(`${date}T00:00:00+04:00`).toISOString();
+    const dayEnd = new Date(`${date}T23:59:59+04:00`).toISOString();
 
     const { data: bookings, error: bookingsError } = await supabase
       .from("bookings")
@@ -316,16 +316,16 @@ export async function GET(request: NextRequest) {
     for (const b of blackouts) {
       if (b.team_id) {
         blackoutBookings.push({
-          slot_start: b.starts_at,
-          slot_end: b.ends_at,
+          slot_start: dayStart,
+          slot_end: dayEnd,
           team_id: b.team_id,
           address: "",
         });
       } else {
         for (const teamId of activeTeamIds) {
           blackoutBookings.push({
-            slot_start: b.starts_at,
-            slot_end: b.ends_at,
+            slot_start: dayStart,
+            slot_end: dayEnd,
             team_id: teamId,
             address: "",
           });
