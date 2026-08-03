@@ -163,11 +163,13 @@ function BookingFlow() {
     return () => window.removeEventListener("beforeunload", handleUnload);
   }, [lock, sessionId]);
 
-  /* min date = tomorrow (memoized to avoid midnight shift during session) */
+  /* min date = max of (tomorrow, Sept 1 2026) so pre-launch dates are disabled */
   const minDate = useMemo(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split("T")[0];
+    const ts = tomorrow.toISOString().split("T")[0];
+    const sept1 = "2026-09-01";
+    return ts > sept1 ? ts : sept1;
   }, []);
 
   /* job duration depends on plan + thermostat count */
