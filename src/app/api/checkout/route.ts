@@ -372,6 +372,43 @@ export async function POST(request: NextRequest) {
       }
 
       const planName = planKey.charAt(0).toUpperCase() + planKey.slice(1);
+
+      // Optional pre-scoring signals — improves Tabby approval rates.
+      const buyerHistory: { registeredSince?: string } = {};
+      const orderHistory: Array<{ purchasedAt: string; amount: string; paymentMethod: string; status: string; buyer: { name: string; email: string; phone: string } }> = [];
+      try {
+        const { data: customerRow } = await supabaseAdmin
+          .from("customers")
+          .select("created_at")
+          .eq("id", customer.id)
+          .returns<{ created_at: string }[]>()
+          .maybeSingle();
+        if (customerRow?.created_at) {
+          buyerHistory.registeredSince = customerRow.created_at;
+        }
+        const { data: prevBookings } = await supabaseAdmin
+          .from("bookings")
+          .select("created_at, price_total_fils, status, payment_provider")
+          .eq("customer_id", customer.id)
+          .neq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(3)
+          .returns<{ created_at: string; price_total_fils: number; status: string; payment_provider: string }[]>();
+        if (prevBookings && prevBookings.length > 0) {
+          for (const b of prevBookings) {
+            orderHistory.push({
+              purchasedAt: b.created_at,
+              amount: formatTabbyAmount(b.price_total_fils || 0),
+              paymentMethod: b.payment_provider === "tabby" ? "Tabby" : "Card",
+              status: b.status === "confirmed" ? "complete" : "cancelled",
+              buyer: { name: customer_name, email: emailNorm, phone: phoneNorm },
+            });
+          }
+        }
+      } catch {
+        // Pre-scoring data is best-effort — never block checkout for it.
+      }
+
       const session = await createCheckoutSession({
         bookingId: booking.id,
         amountFils: vat.totalFils,
@@ -391,6 +428,8 @@ export async function POST(request: NextRequest) {
           cancel: `${appUrl}/api/tabby/callback?booking_id=${booking.id}&session_id=${encodeURIComponent(session_id)}&result=cancel`,
           failure: `${appUrl}/api/tabby/callback?booking_id=${booking.id}&session_id=${encodeURIComponent(session_id)}&result=failure`,
         },
+        buyerHistory: Object.keys(buyerHistory).length > 0 ? buyerHistory : undefined,
+        orderHistory: orderHistory.length > 0 ? orderHistory : undefined,
       });
 
       if (!session.ok) {

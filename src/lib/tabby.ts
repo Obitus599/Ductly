@@ -46,6 +46,20 @@ export interface CreateSessionInput {
   items: TabbyOrderItem[];
   merchantUrls: { success: string; cancel: string; failure: string };
   lang?: string; // default "en"
+  /** Optional pre-scoring signals — improves approval rates. */
+  buyerHistory?: {
+    registeredSince?: string; // ISO date
+    loyaltyLevel?: number;
+    wishlistCount?: number;
+    isSocialNetworksConnected?: boolean;
+  };
+  orderHistory?: Array<{
+    purchasedAt: string; // ISO date
+    amount: string;       // major units
+    paymentMethod: string;
+    status: string;
+    buyer: TabbyBuyer;
+  }>;
 }
 
 export interface CreateSessionResult {
@@ -87,21 +101,31 @@ export async function createCheckoutSession(
   }
 
   const amount = formatTabbyAmount(input.amountFils);
-  const payload = {
-    payment: {
-      amount,
-      currency: input.currency || "AED",
-      description: input.description,
-      buyer: {
-        name: input.buyer.name,
-        email: input.buyer.email,
-        phone: input.buyer.phone,
-      },
-      order: {
-        reference_id: input.bookingId,
-        items: input.items,
-      },
+  const payment: Record<string, unknown> = {
+    amount,
+    currency: input.currency || "AED",
+    description: input.description,
+    buyer: {
+      name: input.buyer.name,
+      email: input.buyer.email,
+      phone: input.buyer.phone,
     },
+    order: {
+      reference_id: input.bookingId,
+      items: input.items,
+    },
+  };
+
+  // Optional pre-scoring signals — improves approval rates.
+  if (input.buyerHistory) {
+    payment.buyer_history = input.buyerHistory;
+  }
+  if (input.orderHistory && input.orderHistory.length > 0) {
+    payment.order_history = input.orderHistory;
+  }
+
+  const payload = {
+    payment,
     lang: input.lang || "en",
     merchant_code: process.env.TABBY_MERCHANT_CODE,
     merchant_urls: input.merchantUrls,
