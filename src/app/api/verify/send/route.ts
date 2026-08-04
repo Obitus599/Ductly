@@ -87,7 +87,12 @@ export async function POST(request: NextRequest) {
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
-  if (testContacts.includes(identifier.toLowerCase())) {
+  // Normalize phone test contacts too so both "050000001" and
+  // "+97150000001" match regardless of the input format.
+  const testNorms = new Set<string>(
+    testContacts.map((c) => normalizeIdentifier(channel, c))
+  );
+  if (testNorms.has(identifier)) {
     await createAndStoreCode(channel, identifier, "000000");
     return NextResponse.json({ ok: true });
   }
