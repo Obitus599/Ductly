@@ -5,7 +5,7 @@ import { fireN8nWebhook } from "@/lib/n8n";
 import { sendWhatsAppOtp, whatsappConfigured } from "@/lib/twilio-whatsapp";
 import { sendEmail, emailConfigured } from "@/lib/email";
 import { renderVerificationEmail } from "@/lib/email-templates";
-import { isUaeMobile } from "@/lib/phone-uae";
+import { isUaeMobile, normalizeUaePhone } from "@/lib/phone-uae";
 import { isValidEmail } from "@/lib/email-validate";
 import {
   createAndStoreCode,
@@ -53,6 +53,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Identifier too long." }, { status: 400 });
   }
 
+  // Test-contact bypass — Tabby QA uses identifiers that can't receive
+  // real messages. Check BEFORE per-contact validation so phone numbers
+  // that don't pass isUaeMobile (e.g. "050000001") still work.
+  const testRaw = (process.env.VERIFY_TEST_CONTACTS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const rawInput = body.identifier.trim().toLowerCase();
+  // Also normalize the phone test contacts so "+971..." matches "050...".
+  const testNorms = new Set<string>();
+  for (const c of testRaw) {
+    testNorms.add(c);
+    if (channel === "sms") {
+      testNorms.add(normalizeUaePhone(c) ?? c);
+    }
+  }
+  if (testNorms.has(rawInput) || rawInput.split("@").length === 2 && testNorms.has(rawInput)) {
+    const identifier = channel === "email"
+      ? rawInput
+      : normalizeUaePhone(rawInput) ?? rawInput;
+    if (!verificationConfigured()) {
+      return NextResponse.json({ error: "Verification is not configured." }, { status: 503 });
+    }
+    await createAndStoreCode(channel, identifier, "000000");
+    return NextResponse.json({ ok: true });
+  }
+
   const identifier = normalizeIdentifier(channel, body.identifier);
   if (channel === "email" && !isValidEmail(identifier)) {
     return NextResponse.json({ error: "Invalid email address." }, { status: 400 });
@@ -78,23 +105,6 @@ export async function POST(request: NextRequest) {
   if (!verificationConfigured()) {
     console.error("VERIFY_CODE_SECRET is not set — cannot issue verification codes.");
     return NextResponse.json({ error: "Verification is not configured." }, { status: 503 });
-  }
-
-  // Test-contact bypass — Tabby QA uses identifiers that can't receive
-  // real messages. Store the static code "000000" and skip delivery so
-  // QA can verify without a real inbox or WhatsApp number.
-  const testContacts = (process.env.VERIFY_TEST_CONTACTS || "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  // Normalize phone test contacts too so both "050000001" and
-  // "+97150000001" match regardless of the input format.
-  const testNorms = new Set<string>(
-    testContacts.map((c) => normalizeIdentifier(channel, c))
-  );
-  if (testNorms.has(identifier)) {
-    await createAndStoreCode(channel, identifier, "000000");
-    return NextResponse.json({ ok: true });
   }
 
   const code = await createAndStoreCode(channel, identifier);
