@@ -55,24 +55,26 @@ export async function POST(request: NextRequest) {
 
   // Test-contact bypass — Tabby QA uses identifiers that can't receive
   // real messages. Check BEFORE per-contact validation so phone numbers
-  // that don't pass isUaeMobile (e.g. "050000001") still work.
-  const testRaw = (process.env.VERIFY_TEST_CONTACTS || "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  const rawInput = body.identifier.trim().toLowerCase();
-  // Also normalize the phone test contacts so "+971..." matches "050...".
-  const testNorms = new Set<string>();
-  for (const c of testRaw) {
-    testNorms.add(c);
+  // that don't pass isUaeMobile still work. For SMS, compare digit-only
+  // forms so "050000001", "+97150000001", and "+971 50 000 0001" all match.
+  const isTestContact = (): boolean => {
+    if (typeof body.identifier !== "string") return false;
+    const raw = body.identifier.trim().toLowerCase();
+    const tests = (process.env.VERIFY_TEST_CONTACTS || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (tests.includes(raw)) return true;
     if (channel === "sms") {
-      testNorms.add(normalizeUaePhone(c) ?? c);
+      const rawDigits = raw.replace(/\D/g, "");
+      for (const t of tests) {
+        if (t.replace(/\D/g, "") === rawDigits) return true;
+      }
     }
-  }
-  if (testNorms.has(rawInput) || rawInput.split("@").length === 2 && testNorms.has(rawInput)) {
-    const identifier = channel === "email"
-      ? rawInput
-      : normalizeUaePhone(rawInput) ?? rawInput;
+    return false;
+  };
+  if (isTestContact()) {
+    const identifier = normalizeIdentifier(channel, body.identifier);
     if (!verificationConfigured()) {
       return NextResponse.json({ error: "Verification is not configured." }, { status: 503 });
     }
