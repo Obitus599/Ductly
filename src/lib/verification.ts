@@ -68,9 +68,11 @@ export function hashCode(code: string): string {
  */
 export async function createAndStoreCode(
   channel: VerifyChannel,
-  identifier: string
+  identifier: string,
+  /** Optional pre-set code for test contacts that can't receive real messages. */
+  forceCode?: string
 ): Promise<string> {
-  const code = generateCode();
+  const code = forceCode ?? generateCode();
   const codeHash = hashCode(code);
   const expiresAt = new Date(Date.now() + CODE_TTL_MINUTES * 60_000).toISOString();
 

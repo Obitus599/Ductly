@@ -80,6 +80,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Verification is not configured." }, { status: 503 });
   }
 
+  // Test-contact bypass — Tabby QA uses identifiers that can't receive
+  // real messages. Store the static code "000000" and skip delivery so
+  // QA can verify without a real inbox or WhatsApp number.
+  const testContacts = (process.env.VERIFY_TEST_CONTACTS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (testContacts.includes(identifier.toLowerCase())) {
+    await createAndStoreCode(channel, identifier, "000000");
+    return NextResponse.json({ ok: true });
+  }
+
   const code = await createAndStoreCode(channel, identifier);
 
   if (channel === "sms") {
