@@ -374,8 +374,8 @@ export async function POST(request: NextRequest) {
       const planName = planKey.charAt(0).toUpperCase() + planKey.slice(1);
 
       // Optional pre-scoring signals — improves Tabby approval rates.
-      const buyerHistory: { registeredSince?: string } = {};
-      const orderHistory: Array<{ purchasedAt: string; amount: string; paymentMethod: string; status: string; buyer: { name: string; email: string; phone: string } }> = [];
+      const buyerHistory: { registered_since?: string } = {};
+      const orderHistory: Array<{ purchased_at: string; amount: string; payment_method: string; status: string; buyer: { name: string; email: string; phone: string } }> = [];
       try {
         const { data: customerRow } = await supabaseAdmin
           .from("customers")
@@ -384,7 +384,7 @@ export async function POST(request: NextRequest) {
           .returns<{ created_at: string }[]>()
           .maybeSingle();
         if (customerRow?.created_at) {
-          buyerHistory.registeredSince = customerRow.created_at;
+          buyerHistory.registered_since = customerRow.created_at;
         }
         const { data: prevBookings } = await supabaseAdmin
           .from("bookings")
@@ -397,9 +397,9 @@ export async function POST(request: NextRequest) {
         if (prevBookings && prevBookings.length > 0) {
           for (const b of prevBookings) {
             orderHistory.push({
-              purchasedAt: b.created_at,
+              purchased_at: b.created_at,
               amount: formatTabbyAmount(b.price_total_fils || 0),
-              paymentMethod: b.payment_provider === "tabby" ? "Tabby" : "Card",
+              payment_method: b.payment_provider === "tabby" ? "Tabby" : "Card",
               status: b.status === "confirmed" ? "complete" : "cancelled",
               buyer: { name: customer_name, email: emailNorm, phone: phoneNorm },
             });

@@ -203,7 +203,7 @@ export default function CheckoutStep({
             >
               <div className="text-[15px] font-medium text-[rgb(61,61,61)] flex items-center gap-1.5">
                 <TabbyLogo size={14} />
-                Tabby
+                Pay later with Tabby
               </div>
               <div className="text-[12px] text-[rgb(140,140,140)]">4 interest-free payments</div>
             </button>

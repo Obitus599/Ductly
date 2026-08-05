@@ -48,15 +48,15 @@ export interface CreateSessionInput {
   lang?: string; // default "en"
   /** Optional pre-scoring signals — improves approval rates. */
   buyerHistory?: {
-    registeredSince?: string; // ISO date
-    loyaltyLevel?: number;
-    wishlistCount?: number;
-    isSocialNetworksConnected?: boolean;
+    registered_since?: string; // ISO date
+    loyalty_level?: number;
+    wishlist_count?: number;
+    is_social_networks_connected?: boolean;
   };
   orderHistory?: Array<{
-    purchasedAt: string; // ISO date
+    purchased_at: string; // ISO date
     amount: string;       // major units
-    paymentMethod: string;
+    payment_method: string;
     status: string;
     buyer: TabbyBuyer;
   }>;
