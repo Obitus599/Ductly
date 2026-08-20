@@ -26,14 +26,15 @@ function SuccessContent() {
   const firedRef = useRef(false);
 
   // Fire the GA4 "purchase" conversion once the booking is confirmed so
-  // linked Google Ads can count it. Guards against double-firing on re-render.
+  // linked Google Ads can count it. Also fire the Facebook "Purchase" event
+  // for the Meta pixel. Guards against double-firing on re-render.
   useEffect(() => {
     if (!details || firedRef.current) return;
     firedRef.current = true;
+    const value = (details.price_total_fils || 0) / 100; // AED major units
     try {
       const gtag = (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag;
       if (typeof gtag === "function") {
-        const value = (details.price_total_fils || 0) / 100; // AED major units
         gtag("event", "purchase", {
           transaction_id: bookingId || sessionId || undefined,
           value,
@@ -50,6 +51,18 @@ function SuccessContent() {
       }
     } catch {
       // Analytics must never break the success page.
+    }
+    try {
+      const fbq = (window as unknown as { fbq?: (...a: unknown[]) => void }).fbq;
+      if (typeof fbq === "function") {
+        fbq("track", "Purchase", {
+          value,
+          currency: "AED",
+          content_name: "Ductly Booking",
+        });
+      }
+    } catch {
+      // Pixel must never break the success page.
     }
   }, [details, bookingId, sessionId]);
 
