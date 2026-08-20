@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import Script from "next/script";
+import FbPageView from "@/components/FbPageView";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -85,6 +86,7 @@ fbq('track', 'PageView');`,
             alt=""
           />
         </noscript>
+        <FbPageView />
         {children}
       </body>
     </html>

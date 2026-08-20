@@ -10,7 +10,7 @@ const isDev = process.env.NODE_ENV !== "production";
 const scriptSrc = [
   "script-src 'self' 'unsafe-inline'",
   isDev ? "'unsafe-eval'" : "",
-  "https://js.stripe.com https://maps.googleapis.com https://maps.gstatic.com https://www.googletagmanager.com https://www.google-analytics.com",
+  "https://js.stripe.com https://maps.googleapis.com https://maps.gstatic.com https://www.googletagmanager.com https://www.google-analytics.com https://connect.facebook.net https://*.fbcdn.net",
 ]
   .filter(Boolean)
   .join(" ");
@@ -53,9 +53,9 @@ const nextConfig = {
               "worker-src 'self' blob: https://maps.googleapis.com https://maps.gstatic.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com https://cdn.fontshare.com",
               "font-src 'self' https://fonts.gstatic.com https://api.fontshare.com https://cdn.fontshare.com",
-              "img-src 'self' data: blob: https://maps.googleapis.com https://*.googleapis.com https://maps.gstatic.com",
-              "frame-src https://js.stripe.com https://www.google.com",
-              "connect-src 'self' blob: https://*.supabase.co https://api.stripe.com https://maps.googleapis.com https://*.googleapis.com https://maps.gstatic.com https://region1.google-analytics.com https://www.google-analytics.com",
+              "img-src 'self' data: blob: https://maps.googleapis.com https://*.googleapis.com https://maps.gstatic.com https://www.facebook.com https://*.facebook.com https://*.fbcdn.net",
+              "frame-src https://js.stripe.com https://www.google.com https://www.facebook.com",
+              "connect-src 'self' blob: https://*.supabase.co https://api.stripe.com https://maps.googleapis.com https://*.googleapis.com https://maps.gstatic.com https://region1.google-analytics.com https://www.google-analytics.com https://connect.facebook.net https://*.facebook.com https://graph.facebook.com",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'",
