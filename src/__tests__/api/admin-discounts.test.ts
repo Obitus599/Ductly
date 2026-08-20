@@ -11,7 +11,11 @@ vi.mock("@/utils/supabase/admin", () => ({
   }),
 }));
 
-// NODE_ENV=test → requireAdmin/requireSameOrigin both bypass (see lib/admin-auth)
+vi.mock("@/lib/admin-auth", () => ({
+  requireAdmin: vi.fn().mockReturnValue(null),
+  requireSameOrigin: vi.fn().mockReturnValue(null),
+}));
+
 import { GET, PATCH, POST } from "@/app/api/admin/discounts/route";
 import {
   PATCH as patchCode,
