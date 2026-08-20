@@ -47,37 +47,37 @@ interface CheckoutStepProps {
 const PAY_METHOD_BTN =
   "text-left rounded-[12px] border-2 p-3 transition-colors w-full";
 
-/** Inline Tabby logo — wordmark + checkmark. */
+/** Inline Tabby logo — checkmark mark + wordmark (never clipped). */
 function TabbyLogo({ size = 16 }: { size?: number }) {
-  const s = size;
   return (
-    <svg
-      width={s * 1.6}
-      height={s}
-      viewBox="0 0 26 16"
-      fill="none"
-      aria-label="Tabby"
-      className="inline-block align-middle"
-    >
-      <rect width="16" height="16" rx="4" fill="rgb(62,255,177)" />
-      <path
-        d="M4.5 8.5L6 10L11 5"
-        stroke="rgb(30,30,45)"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <text
-        x="17"
-        y="12.5"
-        fill="rgb(30,30,45)"
-        fontSize="12"
-        fontWeight="700"
-        fontFamily="system-ui, sans-serif"
+    <span className="inline-flex items-center gap-1 align-middle" aria-label="Tabby">
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 16 16"
+        fill="none"
+        className="shrink-0"
+      >
+        <rect width="16" height="16" rx="4" fill="rgb(62,255,177)" />
+        <path
+          d="M4.5 8.5L6 10L11 5"
+          stroke="rgb(30,30,45)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <span
+        className="font-bold leading-none"
+        style={{
+          fontFamily: "system-ui, sans-serif",
+          color: "rgb(30,30,45)",
+          fontSize: Math.round(size * 0.8),
+        }}
       >
         tabby
-      </text>
-    </svg>
+      </span>
+    </span>
   );
 }
 

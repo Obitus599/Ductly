@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   if (tab === "newsletter") {
     const { data, count, error } = await supabase
       .from("newsletter_subscribers")
-      .select("id, email, subscribed_at", { count: "exact" })
+      .select("id, email, phone, subscribed_at", { count: "exact" })
       .order("subscribed_at", { ascending: false })
       .range(offset, offset + limit - 1);
 

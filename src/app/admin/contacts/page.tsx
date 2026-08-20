@@ -14,6 +14,7 @@ interface Submission {
 interface Subscriber {
   id: string;
   email: string;
+  phone: string | null;
   subscribed_at: string;
 }
 
@@ -97,7 +98,7 @@ export default function ContactsPage() {
           <table className="w-full text-[13px]">
             <thead>
               <tr style={{ background: "rgb(247,248,250)" }}>
-                {["Email", "Subscribed"].map((h) => (
+                {["Email", "Mobile", "Subscribed"].map((h) => (
                   <th key={h} className="px-5 py-3 text-left font-medium border-b"
                     style={{ fontFamily: "var(--font-body)", color: "rgb(140,145,155)", borderColor: "rgb(238,240,244)" }}>
                     {h}
@@ -108,7 +109,7 @@ export default function ContactsPage() {
             <tbody>
               {subscribers.length === 0 ? (
                 <tr>
-                  <td colSpan={2} className="px-5 py-12 text-center text-[14px]" style={{ fontFamily: "var(--font-body)", color: "rgb(160,165,175)" }}>
+                  <td colSpan={3} className="px-5 py-12 text-center text-[14px]" style={{ fontFamily: "var(--font-body)", color: "rgb(160,165,175)" }}>
                     No subscribers yet.
                   </td>
                 </tr>
@@ -119,6 +120,7 @@ export default function ContactsPage() {
                     onMouseEnter={(e) => (e.currentTarget.style.background = "rgb(250,251,252)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                     <td className="px-5 py-3.5" style={{ fontFamily: "var(--font-body)", color: "rgb(61,61,61)" }}>{s.email}</td>
+                    <td className="px-5 py-3.5" style={{ fontFamily: "var(--font-body)", color: "rgb(61,61,61)" }}>{s.phone || "—"}</td>
                     <td className="px-5 py-3.5" style={{ fontFamily: "var(--font-body)", color: "rgb(160,165,175)" }}>{formatDateTime(s.subscribed_at)}</td>
                   </tr>
                 ))

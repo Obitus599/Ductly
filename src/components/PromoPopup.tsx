@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { isUaeMobile } from "@/lib/phone-uae";
 
 /**
  * Newsletter promo popup.
  *
- * Single modal shell that captures an email and marks the signup as a
- * customer lead (POST /api/newsletter). No discount code is minted and
- * nothing is emailed back — the submit only records the contact.
+ * Single modal shell that captures an email + UAE mobile and marks the
+ * signup as a customer lead (POST /api/newsletter). No discount code is
+ * minted and nothing is emailed back — the submit only records the contact.
  *
  * Enabled only when NEXT_PUBLIC_POPUP_VARIANT=newsletter; any other value
  * (or unset) turns the popup off.
@@ -41,6 +42,7 @@ const INPUT_CLASS =
 export default function PromoPopup() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [state, setState] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [error, setError] = useState("");
   const dismissedRef = useRef(false);
@@ -74,17 +76,19 @@ export default function PromoPopup() {
   }, []);
 
   const emailValid = /^[^\s@,()<>"';:]+@[^\s@,()<>"';:]+\.[^\s@,()<>"';:]{2,}$/.test(email.trim());
+  const phoneValid = isUaeMobile(phone);
+  const formValid = emailValid && phoneValid;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailValid || state === "submitting") return;
+    if (!formValid || state === "submitting") return;
     setState("submitting");
     setError("");
     try {
       const res = await fetch(ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ email: email.trim(), phone: phone.trim() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -179,6 +183,24 @@ export default function PromoPopup() {
                 />
               </div>
 
+              <div>
+                <label className="block text-[14px] font-medium text-[rgb(61,61,61)] mb-2" style={{ fontFamily: "var(--font-body)" }}>
+                  Mobile
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="050 123 4567"
+                  inputMode="tel"
+                  className={INPUT_CLASS}
+                  style={{ fontFamily: "var(--font-body)" }}
+                />
+                <p className="mt-1.5 text-[12px] text-[rgb(140,140,140)]" style={{ fontFamily: "var(--font-body)" }}>
+                  UAE mobile numbers only — e.g. 050 123 4567 or +971 50 123 4567.
+                </p>
+              </div>
+
               {state === "error" && (
                 <p className="text-[13px] text-[rgb(200,70,70)]" style={{ fontFamily: "var(--font-body)" }}>
                   {error}
@@ -187,7 +209,7 @@ export default function PromoPopup() {
 
               <button
                 type="submit"
-                disabled={!emailValid || state === "submitting"}
+                disabled={!formValid || state === "submitting"}
                 className="w-full px-6 py-3.5 text-[16px] text-white hover:brightness-110 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{
                   background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))",

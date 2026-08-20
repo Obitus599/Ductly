@@ -162,6 +162,19 @@ function BookingFlow() {
     }
   }, [planKey]);
 
+  /* Un-stick the "redirecting" state when the page is restored from the
+     back/forward cache. After `window.location.href` navigates away and the
+     customer presses Back, the browser restores the previous page with its
+     in-memory state (submitting=true), leaving the button stuck on
+     "Redirecting to payment…" and blocking a payment-method change. */
+  useEffect(() => {
+    const onPageshow = (e: PageTransitionEvent) => {
+      if (e.persisted) setSubmitting(false);
+    };
+    window.addEventListener("pageshow", onPageshow);
+    return () => window.removeEventListener("pageshow", onPageshow);
+  }, []);
+
   /* release lock if user closes/navigates away */
   useEffect(() => {
     if (!lock) return;
