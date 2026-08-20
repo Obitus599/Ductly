@@ -97,7 +97,7 @@ export default function PromoPopup() {
         setError(data.error || "Something went wrong. Please try again.");
         return;
       }
-      fbqEvent("Lead", { content_name: "Newsletter Signup", value: 0 });
+      fbqEvent("Lead", { content_name: "Newsletter Signup" });
       setState("success");
     } catch {
       setState("error");

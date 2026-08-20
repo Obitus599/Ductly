@@ -159,13 +159,21 @@ function BookingFlow() {
      customer reaches the checkout step. */
   useEffect(() => {
     if (planKey) {
-      fbqEvent("ViewContent", { content_name: `${planKey} Plan` });
+      fbqEvent("ViewContent", {
+        content_name: `${planKey} Plan`,
+        content_type: "product",
+        content_ids: [planKey],
+      });
     }
   }, [planKey]);
 
   useEffect(() => {
     if (step === "checkout") {
-      fbqEvent("InitiateCheckout", { content_name: "Ductly Booking" });
+      fbqEvent("InitiateCheckout", {
+        content_name: "Ductly Booking",
+        content_type: "product",
+        num_items: 1,
+      });
     }
   }, [step]);
 
@@ -240,6 +248,8 @@ function BookingFlow() {
       const data: SlotResponse = await res.json();
       setSlots(data.slots ?? []);
       setTotalTeams(data.total_teams ?? 0);
+      // Meta standard event — user searched for available booking slots.
+      fbqEvent("Search", { content_name: "Booking Slots", search_string: date });
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError("Failed to load available slots.");
