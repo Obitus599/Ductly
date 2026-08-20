@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { type Step, PLANS, calcJobDuration, type SlotResponse, type LockResponse } from "./shared";
+import PlanStep from "./PlanStep";
 import DetailsStep from "./DetailsStep";
 import CalendarStep from "./CalendarStep";
 import CheckoutStep from "./CheckoutStep";
@@ -13,6 +14,7 @@ import { isUaeMobile } from "@/lib/phone-uae";
 /* ─── Step Indicator ────────────────────────────────────────────────── */
 
 const STEPS: { key: Step; label: string }[] = [
+  { key: "plan", label: "Plan" },
   { key: "details", label: "Details" },
   { key: "calendar", label: "Schedule" },
   { key: "checkout", label: "Checkout" },
@@ -75,10 +77,13 @@ function StepIndicator({ current }: { current: Step }) {
 
 function BookingFlow() {
   const searchParams = useSearchParams();
-  const planKey = searchParams.get("plan") ?? "signature";
-  const plan = PLANS[planKey] ?? PLANS.signature;
+  const planFromUrl = searchParams.get("plan");
+  const [planKey, setPlanKey] = useState<string | null>(
+    planFromUrl && PLANS[planFromUrl] ? planFromUrl : null
+  );
+  const plan = planKey ? PLANS[planKey] : null;
 
-  const [step, setStep] = useState<Step>("details");
+  const [step, setStep] = useState<Step>("plan");
 
   /* form state */
   const [name, setName] = useState("");
@@ -130,6 +135,15 @@ function BookingFlow() {
   const [cancelled, setCancelled] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
 
+  /* discount code state */
+  const [discountCode, setDiscountCode] = useState("");
+  const [discountApplied, setDiscountApplied] = useState<{
+    code: string; percent: number; savingsFils: number;
+    netFils: number; vatFils: number; totalFils: number;
+  } | null>(null);
+  const [discountError, setDiscountError] = useState("");
+  const [discountLoading, setDiscountLoading] = useState(false);
+
   /* refs for async handlers */
   const abortRef = useRef<AbortController | null>(null);
   const lockRef = useRef<LockResponse | null>(null);
@@ -144,7 +158,7 @@ function BookingFlow() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("cancelled") === "true") {
       setCancelled(true);
-      window.history.replaceState({}, "", `/book?plan=${planKey}`);
+      window.history.replaceState({}, "", planKey ? `/book?plan=${planKey}` : "/book");
     }
   }, [planKey]);
 
@@ -174,7 +188,7 @@ function BookingFlow() {
 
   /* job duration depends on plan + thermostat count */
   const jobDurationMins = useMemo(
-    () => calcJobDuration(plan, thermostats),
+    () => (plan ? calcJobDuration(plan, thermostats) : 0),
     [plan, thermostats]
   );
 
@@ -225,7 +239,7 @@ function BookingFlow() {
 
   /* browser back-button → step back instead of leaving page */
   useEffect(() => {
-    if (step !== "details") {
+    if (step !== "plan") {
       window.history.pushState(null, "");
     }
   }, [step]);
@@ -247,6 +261,7 @@ function BookingFlow() {
           return "calendar";
         }
         if (prev === "calendar") return "details";
+        if (prev === "details") return "plan";
         return prev;
       });
     };
@@ -297,9 +312,29 @@ function BookingFlow() {
     setSelectedSlot("");
   }
 
+  /* select a plan — availability depends on its duration, so reset any
+     schedule/lock state picked under the previous plan */
+  function selectPlan(key: string) {
+    if (key === planKey) return;
+    if (lock) {
+      fetch("/api/booking-locks", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, slot_start: lock.slot_start }),
+      }).catch(() => {});
+    }
+    setLock(null);
+    setSelectedDate("");
+    setSlots([]);
+    setSelectedSlot("");
+    setLockCountdown(0);
+    setPlanKey(key);
+  }
+
   /* submit to Stripe checkout */
   async function handleCheckout() {
     if (submitting) return;
+    if (!planKey) { setError("Please choose a plan first."); return; }
     setSubmitting(true);
     setError("");
 
@@ -318,6 +353,7 @@ function BookingFlow() {
           plan: planKey, slot_start: slotStart, slot_end: slotEnd, session_id: sessionId,
           consent_version: CURRENT_CONSENT_VERSION,
           payment_method: enableTabby ? paymentMethod : "card",
+          discount_code: discountApplied ? discountApplied.code : "",
         }),
       });
       const data = await res.json();
@@ -335,6 +371,43 @@ function BookingFlow() {
     }
   }
 
+  /* apply a discount code — preview the discounted total before paying */
+  async function applyDiscount() {
+    const code = discountCode.trim();
+    if (!code || !planKey || discountLoading) return;
+    setDiscountLoading(true);
+    setDiscountError("");
+    try {
+      const res = await fetch(
+        `/api/discount/validate?code=${encodeURIComponent(code)}&plan=${encodeURIComponent(planKey)}&thermostats=${thermostats}`
+      );
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        const reason =
+          data.reason === "not_found" ? "This code isn't valid."
+          : data.reason === "inactive" ? "This code is no longer active."
+          : data.reason === "expired" ? "This code has expired."
+          : data.reason === "usage_limit" ? "This code has reached its usage limit."
+          : "This code isn't valid.";
+        setDiscountError(reason);
+        setDiscountApplied(null);
+        return;
+      }
+      setDiscountApplied({
+        code: data.code,
+        percent: data.percent,
+        savingsFils: data.savingsFils,
+        netFils: data.netFils,
+        vatFils: data.vatFils,
+        totalFils: data.totalFils,
+      });
+    } catch {
+      setDiscountError("Couldn't check that code. Please try again.");
+    } finally {
+      setDiscountLoading(false);
+    }
+  }
+
   /* derived */
   const detailsValid = !!(
     name.trim() && email.trim() &&
@@ -349,14 +422,16 @@ function BookingFlow() {
   return (
     <div>
       {/* Plan badge */}
-      <div className="text-center mb-2">
-        <span
-          className="inline-block text-[13px] text-white px-4 py-1.5 rounded-full"
-          style={{ background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))", fontFamily: "var(--font-badge)" }}
-        >
-          {plan.name} Plan
-        </span>
-      </div>
+      {plan && (
+        <div className="text-center mb-2">
+          <span
+            className="inline-block text-[13px] text-white px-4 py-1.5 rounded-full"
+            style={{ background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))", fontFamily: "var(--font-badge)" }}
+          >
+            {plan.name} Plan
+          </span>
+        </div>
+      )}
 
       <h1
         className="text-[28px] md:text-[36px] font-normal tracking-[-0.04em] text-[rgb(61,61,61)] text-center mb-8"
@@ -380,6 +455,16 @@ function BookingFlow() {
       )}
 
       {/* Steps */}
+      {step === "plan" && (
+        <PlanStep
+          plans={PLANS}
+          selectedKey={planKey}
+          onSelect={selectPlan}
+          onContinue={() => { setError(""); setStep("details"); }}
+          canContinue={!!planKey}
+        />
+      )}
+
       {step === "details" && (
         <DetailsStep
           name={name} setName={setName}
@@ -398,7 +483,7 @@ function BookingFlow() {
         />
       )}
 
-      {step === "calendar" && (
+      {step === "calendar" && plan && (
         <CalendarStep
           plan={plan}
           jobDurationMins={jobDurationMins}
@@ -413,7 +498,7 @@ function BookingFlow() {
         />
       )}
 
-      {step === "checkout" && (
+      {step === "checkout" && plan && (
         <CheckoutStep
           plan={plan}
           name={name} email={email} phone={phone} address={addressDetails.formatted_address}
@@ -427,6 +512,12 @@ function BookingFlow() {
           onCheckout={handleCheckout}
           enableTabby={enableTabby}
           paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
+          discountCode={discountCode}
+          setDiscountCode={(v) => { setDiscountCode(v); if (discountApplied) { setDiscountApplied(null); setDiscountError(""); } }}
+          discountApplied={discountApplied}
+          discountError={discountError}
+          discountLoading={discountLoading}
+          onApplyDiscount={applyDiscount}
         />
       )}
     </div>

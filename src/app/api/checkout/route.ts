@@ -11,6 +11,7 @@ import { PLANS, calcJobDuration } from "@/lib/pricing";
 import type { PlanTier } from "@/lib/pricing";
 import { isValidEmail } from "@/lib/email-validate";
 import { tabbyConfigured, createCheckoutSession, formatTabbyAmount } from "@/lib/tabby";
+import { validateCodeForUse, applyDiscount, normalizeCode } from "@/lib/discounts";
 
 const PLAN_CONFIG = PLANS;
 
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
       session_id,
       consent_version,
       payment_method,
+      discount_code,
     } = body;
 
     // Which rail: card (Stripe, default) or Tabby BNPL.
@@ -234,10 +236,35 @@ export async function POST(request: NextRequest) {
 
     // Calculate price: tier rate × thermostats. Displayed prices are
     // NET (VAT-exclusive); 5% VAT is added on top at checkout.
+    // An optional discount code is applied to the net; VAT is then
+    // recomputed on the discounted net (FTA rule). This is the ONLY
+    // authoritative discount application — the client preview is not trusted.
     const rate = planCfg.rate;
     const priceAED = rate * thermostatCount;
     const priceInFils = priceAED * 100;
     const vat = vatFromNet(priceInFils);
+
+    let appliedDiscount: { code: string; percent: number } | null = null;
+    if (discount_code) {
+      const normalized = normalizeCode(discount_code);
+      const check = await validateCodeForUse(normalized);
+      if (!check.ok || check.percent === undefined) {
+        const reason =
+          check.reason === "not_found" ? "This discount code isn't valid."
+          : check.reason === "inactive" ? "This discount code is no longer active."
+          : check.reason === "expired" ? "This discount code has expired."
+          : check.reason === "usage_limit" ? "This discount code has reached its usage limit."
+          : "This discount code isn't valid.";
+        return NextResponse.json({ error: reason }, { status: 400 });
+      }
+      appliedDiscount = { code: normalized, percent: check.percent };
+    }
+
+    const discounted = appliedDiscount ? applyDiscount(priceInFils, appliedDiscount.percent) : null;
+    const finalNetFils = discounted ? discounted.netFils : vat.netFils;
+    const finalVatFils = discounted ? discounted.vatFils : vat.vatFils;
+    const finalTotalFils = discounted ? discounted.totalFils : vat.totalFils;
+    const finalPriceAED = Math.round(finalNetFils / 100);
 
     // 1. Verify the booking lock is still active
     const { data: lock } = await supabaseAdmin
@@ -341,11 +368,13 @@ export async function POST(request: NextRequest) {
         // the invoice never has to recompute or read back from Stripe.
         plan: planKey,
         thermostats: thermostatCount,
-        price_net_fils: vat.netFils,
-        price_vat_fils: vat.vatFils,
-        price_total_fils: vat.totalFils,
+        price_net_fils: finalNetFils,
+        price_vat_fils: finalVatFils,
+        price_total_fils: finalTotalFils,
         vat_rate: vat.vatRatePercent,
         currency: "aed",
+        discount_code: appliedDiscount ? appliedDiscount.code : null,
+        discount_percent: appliedDiscount ? appliedDiscount.percent : null,
       } as never)
       .select("id")
       .returns<{ id: string }[]>()
@@ -411,7 +440,7 @@ export async function POST(request: NextRequest) {
 
       const session = await createCheckoutSession({
         bookingId: booking.id,
-        amountFils: vat.totalFils,
+        amountFils: finalTotalFils,
         currency: "AED",
         description: `Ductly duct cleaning — ${planName} Plan`,
         buyer: { name: customer_name, email: emailNorm, phone: phoneNorm },
@@ -419,7 +448,7 @@ export async function POST(request: NextRequest) {
           {
             title: `Duct Cleaning — ${planName} Plan`,
             quantity: 1,
-            unit_price: formatTabbyAmount(vat.totalFils),
+            unit_price: formatTabbyAmount(finalTotalFils),
             category: "Home Services",
           },
         ],
@@ -467,10 +496,10 @@ export async function POST(request: NextRequest) {
         checkout_url: session.webUrl,
         provider: "tabby",
         booking_id: booking.id,
-        price_aed: priceAED,
-        price_net_fils: vat.netFils,
-        price_vat_fils: vat.vatFils,
-        price_total_fils: vat.totalFils,
+        price_aed: finalPriceAED,
+        price_net_fils: finalNetFils,
+        price_vat_fils: finalVatFils,
+        price_total_fils: finalTotalFils,
       });
     }
 
@@ -505,10 +534,12 @@ export async function POST(request: NextRequest) {
           thermostats: String(thermostatCount),
           ducts: String(ductCount),
           plan: planKey,
-          price_aed: String(priceAED),
-          price_net_fils: String(vat.netFils),
-          price_vat_fils: String(vat.vatFils),
-          price_total_fils: String(vat.totalFils),
+          price_aed: String(finalPriceAED),
+          price_net_fils: String(finalNetFils),
+          price_vat_fils: String(finalVatFils),
+          price_total_fils: String(finalTotalFils),
+          discount_code: appliedDiscount ? appliedDiscount.code : "",
+          discount_percent: appliedDiscount ? String(appliedDiscount.percent) : "",
         },
         payment_intent_data: {
           metadata: {
@@ -523,7 +554,7 @@ export async function POST(request: NextRequest) {
           {
             price_data: {
               currency: "aed",
-              unit_amount: vat.netFils,
+              unit_amount: finalNetFils,
               product_data: {
                 name: `Duct Cleaning — ${planName} Plan`,
                 description: `${propertyLabel} — ${bedroomLabel} · ${thermostatCount} thermostat${thermostatCount > 1 ? "s" : ""} · ${ductCount} duct${ductCount > 1 ? "s" : ""}`,
@@ -536,7 +567,7 @@ export async function POST(request: NextRequest) {
             // out at checkout — total = net + VAT.
             price_data: {
               currency: "aed",
-              unit_amount: vat.vatFils,
+              unit_amount: finalVatFils,
               product_data: {
                 name: `VAT (${VAT_RATE_PERCENT}%)`,
               },
@@ -562,10 +593,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       checkout_url: checkoutSession.url,
       booking_id: booking.id,
-      price_aed: priceAED, // net (VAT-exclusive), whole AED
-      price_net_fils: vat.netFils,
-      price_vat_fils: vat.vatFils,
-      price_total_fils: vat.totalFils,
+      price_aed: finalPriceAED, // net (VAT-exclusive), whole AED
+      price_net_fils: finalNetFils,
+      price_vat_fils: finalVatFils,
+      price_total_fils: finalTotalFils,
     });
   } catch (error) {
     console.error("Checkout error:", error);

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, type ReactNode } from "react";
 import { motion, useInView } from "framer-motion";
 import Link from "next/link";
 import ChatWidget from "@/components/ChatWidget";
+import PromoPopup from "@/components/PromoPopup";
 import Image from "next/image";
 
 /* ─── Animation ──────────────────────────────────────────────────────────── */
@@ -1001,6 +1002,7 @@ export default function Home() {
       </main>
       <Footer />
       <ChatWidget />
+      <PromoPopup />
     </>
   );
 }

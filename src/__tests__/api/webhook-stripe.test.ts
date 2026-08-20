@@ -73,6 +73,10 @@ function setupSupabaseMock(bookingStatus = "pending") {
                 data: { status: bookingStatus },
                 error: null,
               }),
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { discount_code: null },
+                error: null,
+              }),
             }),
           }),
         }),

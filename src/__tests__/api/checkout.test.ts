@@ -134,6 +134,17 @@ describe("POST /api/checkout", () => {
       if (table === "error_log") {
         return { insert: vi.fn().mockResolvedValue({ error: null }) };
       }
+      if (table === "discount_codes") {
+        return {
+          select: () => ({
+            eq: () => ({
+              returns: () => ({
+                maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+              }),
+            }),
+          }),
+        };
+      }
       return {};
     });
   });
@@ -194,6 +205,230 @@ describe("POST /api/checkout", () => {
     expect(data.checkout_url).toBe("https://checkout.stripe.com/test");
     expect(data.booking_id).toBe("book-1");
     expect(data.price_aed).toBe(2196); // 4 thermostats × 549 AED
+  });
+
+  it("returns 400 for an invalid discount code", async () => {
+    const res = await POST(makeRequest({ ...VALID_BODY, discount_code: "DUCTLY-NOPE" }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/isn't valid/i);
+  });
+
+  it("applies a valid 50% discount to the Stripe line items and snapshot", async () => {
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === "booking_locks") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                gt: () => ({
+                  returns: () => ({
+                    single: vi.fn().mockResolvedValue({ data: { id: "lock-1" }, error: null }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "schedule_blackouts") {
+        return {
+          select: () => ({
+            lt: () => ({
+              gt: () => ({
+                returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "teams") {
+        return {
+          select: () => ({
+            eq: () => ({
+              returns: vi.fn().mockResolvedValue({ data: [{ id: "team-1" }], error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === "customers") {
+        return {
+          upsert: () => ({
+            select: () => ({
+              returns: () => ({
+                single: vi.fn().mockResolvedValue({ data: { id: "cust-1" }, error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "bookings") {
+        return {
+          insert: () => ({
+            select: () => ({
+              returns: () => ({
+                single: vi.fn().mockResolvedValue({ data: { id: "book-1" }, error: null }),
+              }),
+            }),
+          }),
+          update: () => ({
+            eq: () => ({
+              eq: vi.fn().mockResolvedValue({ error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === "error_log") {
+        return { insert: vi.fn().mockResolvedValue({ error: null }) };
+      }
+      if (table === "discount_codes") {
+        return {
+          select: () => ({
+            eq: () => ({
+              returns: () => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    code: "DUCTLY-TEST1",
+                    discount_percent: 50,
+                    active: true,
+                    expires_at: null,
+                    max_uses: null,
+                    used_count: 0,
+                    issued_to_email: null,
+                    issued_to_phone: null,
+                    created_at: null,
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return {};
+    });
+
+    const res = await POST(makeRequest({ ...VALID_BODY, discount_code: "DUCTLY-TEST1" }));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    // 50% off net 219600 → 109800 fils; VAT 5% = 5490; total 115290
+    expect(data.price_aed).toBe(1098);
+    expect(data.price_net_fils).toBe(109800);
+    expect(data.price_vat_fils).toBe(5490);
+    expect(data.price_total_fils).toBe(115290);
+
+    const [createArgs] = mockStripeCreate.mock.calls[0];
+    expect(createArgs.line_items[0].price_data.unit_amount).toBe(109800);
+    expect(createArgs.line_items[1].price_data.unit_amount).toBe(5490);
+    expect(createArgs.metadata.discount_code).toBe("DUCTLY-TEST1");
+    expect(createArgs.metadata.discount_percent).toBe("50");
+  });
+
+  it("records the discount on the booking insert", async () => {
+    const insertMock = vi.fn();
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === "booking_locks") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                gt: () => ({
+                  returns: () => ({
+                    single: vi.fn().mockResolvedValue({ data: { id: "lock-1" }, error: null }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "schedule_blackouts") {
+        return {
+          select: () => ({
+            lt: () => ({
+              gt: () => ({
+                returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "teams") {
+        return {
+          select: () => ({
+            eq: () => ({
+              returns: vi.fn().mockResolvedValue({ data: [{ id: "team-1" }], error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === "customers") {
+        return {
+          upsert: () => ({
+            select: () => ({
+              returns: () => ({
+                single: vi.fn().mockResolvedValue({ data: { id: "cust-1" }, error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "bookings") {
+        return {
+          insert: (payload: Record<string, unknown>) => {
+            insertMock(payload);
+            return {
+              select: () => ({
+                returns: () => ({
+                  single: vi.fn().mockResolvedValue({ data: { id: "book-1" }, error: null }),
+                }),
+              }),
+            };
+          },
+          update: () => ({
+            eq: () => ({
+              eq: vi.fn().mockResolvedValue({ error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === "error_log") {
+        return { insert: vi.fn().mockResolvedValue({ error: null }) };
+      }
+      if (table === "discount_codes") {
+        return {
+          select: () => ({
+            eq: () => ({
+              returns: () => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    code: "DUCTLY-TEST1",
+                    discount_percent: 50,
+                    active: true,
+                    expires_at: null,
+                    max_uses: null,
+                    used_count: 0,
+                    issued_to_email: null,
+                    issued_to_phone: null,
+                    created_at: null,
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return {};
+    });
+
+    await POST(makeRequest({ ...VALID_BODY, discount_code: "DUCTLY-TEST1" }));
+    expect(insertMock).toHaveBeenCalled();
+    const bookingPayload = insertMock.mock.calls[0][0];
+    expect(bookingPayload.discount_code).toBe("DUCTLY-TEST1");
+    expect(bookingPayload.discount_percent).toBe(50);
+    expect(bookingPayload.price_net_fils).toBe(109800);
   });
 
   it("passes correct args to Stripe (price, VAT line, metadata, idempotency)", async () => {

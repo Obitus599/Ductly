@@ -41,3 +41,38 @@ This code expires in ${ttlMinutes} minutes. If you didn't request it, you can sa
 
   return { subject, html, text };
 }
+
+/**
+ * Discount code email, sent after a popup signup. The code stays in the
+ * body (not the subject) for the same reason as the verification code.
+ */
+export function renderDiscountEmail(code: string, percent: number): RenderedEmail {
+  const subject = `Your ${percent}% Ductly discount code`;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7f8fa; padding: 40px 20px;">
+<div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 2px solid #eef0f4; padding: 40px; text-align: center;">
+  <img src="https://ductly.ae/images/logo.png" alt="Ductly" style="height: 36px; margin-bottom: 24px;" />
+  <h1 style="font-size: 22px; color: #3d3d3d; margin: 0 0 8px;">You're one step from cleaner air</h1>
+  <p style="color: #a0a5af; font-size: 14px; margin: 0 0 24px;">Thank you for signing up. Here is your ${percent}% discount code — apply it at checkout.</p>
+  <div style="font-size: 28px; font-weight: 700; letter-spacing: 3px; color: #3d3d3d; background: #fcfcfc; border: 1px solid #f4f4f4; border-radius: 12px; padding: 18px 0; margin-bottom: 24px;">${code}</div>
+  <a href="https://ductly.ae/book" style="display: inline-block; background: linear-gradient(135deg, #93d8d8, #95cf8c); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 40px; padding: 14px 32px;">Book your cleaning</a>
+  <p style="font-size: 13px; color: #a0a5af; margin-top: 24px;">Enter the code above at checkout to get ${percent}% off your duct cleaning. If you didn't request this, you can safely ignore this email.</p>
+</div>
+</body>
+</html>`;
+
+  const text = `You're one step from cleaner air
+
+Thank you for signing up. Here is your ${percent}% discount code — apply it at checkout.
+
+${code}
+
+Book your cleaning at https://ductly.ae/book
+Enter the code above at checkout to get ${percent}% off your duct cleaning.
+If you didn't request this, you can safely ignore this email.`;
+
+  return { subject, html, text };
+}

@@ -1,6 +1,6 @@
 /* ─── Shared types & styles for the booking flow ─────────────────── */
 
-export type Step = "details" | "calendar" | "checkout";
+export type Step = "plan" | "details" | "calendar" | "checkout";
 
 import { PLANS as _plans, type PlanConfig as _PlanConfig } from "@/lib/pricing";
 
@@ -9,6 +9,8 @@ export interface PlanConfig {
   rate: number;
   setupMins: number;
   perThermostatMins: number;
+  tagline: string;
+  features: string[];
 }
 
 export const PLANS: Record<string, PlanConfig> = {};
@@ -18,6 +20,8 @@ for (const [key, cfg] of Object.entries(_plans)) {
     rate: cfg.rate,
     setupMins: cfg.setupMins,
     perThermostatMins: cfg.perThermostatMins,
+    tagline: cfg.tagline,
+    features: cfg.features,
   };
 }
 

@@ -4,6 +4,7 @@ import { assignTeamToBooking } from "@/lib/scheduling-agent";
 import { fireN8nWebhook } from "@/lib/n8n";
 import { fireOpsAlert } from "@/lib/ops-alert";
 import { isSlotFulfillable } from "@/lib/slot-capacity";
+import { bumpDiscountUsage } from "@/lib/discounts";
 import {
   buildMapsLink,
   formatSlotForDispatch,
@@ -152,6 +153,18 @@ export async function confirmPaidBooking(
   // Release the temporary booking lock.
   if (sessionId) {
     await supabase.from("booking_locks").delete().eq("session_id", sessionId);
+  }
+
+  // If this booking used a discount code, count it toward the code's
+  // usage limit. Covers both Stripe and Tabby (both route through here).
+  const { data: discountRow } = await supabase
+    .from("bookings")
+    .select("discount_code")
+    .eq("id", bookingId)
+    .returns<{ discount_code: string | null }[]>()
+    .maybeSingle();
+  if (discountRow?.discount_code) {
+    await bumpDiscountUsage(discountRow.discount_code);
   }
 
   let assignedTeamId: string | undefined;

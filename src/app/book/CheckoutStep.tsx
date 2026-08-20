@@ -4,6 +4,15 @@ import { CARD, CTA, Row, formatSlot, formatDate } from "./shared";
 import { vatFromNet, filsToAedString, VAT_RATE_PERCENT } from "@/lib/vat";
 import TabbyPromo from "@/components/TabbyPromo";
 
+interface DiscountApplied {
+  code: string;
+  percent: number;
+  savingsFils: number;
+  netFils: number;
+  vatFils: number;
+  totalFils: number;
+}
+
 interface CheckoutStepProps {
   plan: { name: string; rate: number };
   name: string;
@@ -26,6 +35,12 @@ interface CheckoutStepProps {
   enableTabby: boolean;
   paymentMethod: "card" | "tabby";
   setPaymentMethod: (v: "card" | "tabby") => void;
+  discountCode: string;
+  setDiscountCode: (v: string) => void;
+  discountApplied: DiscountApplied | null;
+  discountError: string;
+  discountLoading: boolean;
+  onApplyDiscount: () => void;
 }
 
 /** Shared pill style used for the payment method options. */
@@ -71,8 +86,12 @@ export default function CheckoutStep({
   thermostats, selectedDate, selectedSlot, lockCountdown, hasLock,
   submitting, consentChecked, setConsentChecked, onBack, onCheckout,
   enableTabby, paymentMethod, setPaymentMethod,
+  discountCode, setDiscountCode, discountApplied, discountError, discountLoading, onApplyDiscount,
 }: CheckoutStepProps) {
-  const vat = vatFromNet(plan.rate * thermostats * 100);
+  const baseVat = vatFromNet(plan.rate * thermostats * 100);
+  const vat = discountApplied
+    ? { netFils: discountApplied.netFils, vatFils: discountApplied.vatFils, totalFils: discountApplied.totalFils, vatRatePercent: VAT_RATE_PERCENT }
+    : baseVat;
 
   return (
     <div className="p-7 md:p-10" style={CARD}>
@@ -114,6 +133,9 @@ export default function CheckoutStep({
           <Row label="Time" value={formatSlot(selectedSlot)} />
         </div>
         <div className="border-t-2 border-[rgb(230,230,230)] mt-3 pt-3 space-y-1.5">
+          {discountApplied && (
+            <Row label={`Discount (−${discountApplied.percent}%)`} value={`− AED ${filsToAedString(discountApplied.savingsFils)}`} />
+          )}
           <Row label="Subtotal" value={`AED ${filsToAedString(vat.netFils)}`} />
           <Row label={`VAT (${VAT_RATE_PERCENT}%)`} value={`AED ${filsToAedString(vat.vatFils)}`} />
           <div className="flex justify-between items-center pt-1">
@@ -138,6 +160,56 @@ export default function CheckoutStep({
           {/* Tabby product/pricing snippet — shows split amount near total */}
           {enableTabby && (
             <TabbyPromo price={vat.totalFils} source="product" />
+          )}
+        </div>
+
+        {/* Discount code */}
+        <div className="border-t border-[rgb(240,240,240)] mt-4 pt-4">
+          {discountApplied ? (
+            <div className="flex items-center justify-between rounded-[10px] px-3 py-2.5" style={{ background: "rgba(34,197,94,0.08)" }}>
+              <span className="text-[13px] font-medium" style={{ fontFamily: "var(--font-body)", color: "rgb(34,160,84)" }}>
+                Code applied: {discountApplied.code}
+              </span>
+              <button
+                type="button"
+                onClick={() => setDiscountCode("")}
+                className="text-[12px] hover:opacity-70 transition-opacity"
+                style={{ fontFamily: "var(--font-body)", color: "rgb(34,160,84)" }}
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="discount-code" className="text-[13px] font-medium mb-1.5 block" style={{ fontFamily: "var(--font-body)", color: "rgb(130,135,145)" }}>
+                Have a discount code?
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="discount-code"
+                  type="text"
+                  value={discountCode}
+                  onChange={(e) => setDiscountCode(e.target.value)}
+                  placeholder="DUCTLY-XXXXX"
+                  className="flex-1 rounded-[10px] border-2 border-[rgb(230,230,230)] bg-white px-3 py-2.5 text-[14px] text-[rgb(61,61,61)] placeholder:text-[rgb(185,185,185)] focus:border-[rgb(147,216,216)] focus:outline-none transition-colors uppercase"
+                  style={{ fontFamily: "var(--font-body)" }}
+                />
+                <button
+                  type="button"
+                  onClick={onApplyDiscount}
+                  disabled={discountLoading || !discountCode.trim()}
+                  className="px-4 py-2.5 rounded-[10px] text-[13px] font-medium text-white transition-all hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ fontFamily: "var(--font-cta)", background: "linear-gradient(135deg, rgb(147,216,216), rgb(149,207,140))" }}
+                >
+                  {discountLoading ? "Applying..." : "Apply"}
+                </button>
+              </div>
+              {discountError && (
+                <p className="text-[12px] mt-1.5" style={{ fontFamily: "var(--font-body)", color: "rgb(200,70,70)" }}>
+                  {discountError}
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
