@@ -6,6 +6,7 @@ import Link from "next/link";
 import ChatWidget from "@/components/ChatWidget";
 import PromoPopup from "@/components/PromoPopup";
 import Image from "next/image";
+import { fbqEvent } from "@/lib/fbq";
 
 /* ─── Animation ──────────────────────────────────────────────────────────── */
 
@@ -845,6 +846,7 @@ function ContactSection() {
         return;
       }
       setSubmitted(true);
+      fbqEvent("Contact", { content_name: "Contact Form" });
       form.reset();
     } catch {
       setContactError("Network error. Please try again.");

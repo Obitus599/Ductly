@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { isUaeMobile } from "@/lib/phone-uae";
+import { fbqEvent } from "@/lib/fbq";
 
 /**
  * Newsletter promo popup.
@@ -96,6 +97,7 @@ export default function PromoPopup() {
         setError(data.error || "Something went wrong. Please try again.");
         return;
       }
+      fbqEvent("Lead", { content_name: "Newsletter Signup", value: 0 });
       setState("success");
     } catch {
       setState("error");

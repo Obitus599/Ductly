@@ -10,6 +10,7 @@ import CheckoutStep from "./CheckoutStep";
 import { type AddressDetails, EMPTY_ADDRESS } from "./AddressPicker";
 import { CURRENT_CONSENT_VERSION } from "@/lib/consent";
 import { isUaeMobile } from "@/lib/phone-uae";
+import { fbqEvent } from "@/lib/fbq";
 
 /* ─── Step Indicator ────────────────────────────────────────────────── */
 
@@ -153,6 +154,20 @@ function BookingFlow() {
   /* #7: editing a verified contact invalidates its verification */
   useEffect(() => { setEmailVerified(false); }, [email]);
   useEffect(() => { setPhoneVerified(false); }, [phone]);
+
+  /* Meta pixel: ViewContent when a plan is chosen, InitiateCheckout when the
+     customer reaches the checkout step. */
+  useEffect(() => {
+    if (planKey) {
+      fbqEvent("ViewContent", { content_name: `${planKey} Plan` });
+    }
+  }, [planKey]);
+
+  useEffect(() => {
+    if (step === "checkout") {
+      fbqEvent("InitiateCheckout", { content_name: "Ductly Booking" });
+    }
+  }, [step]);
 
   /* check for cancelled from Stripe redirect */
   useEffect(() => {
