@@ -19,12 +19,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
  *   - generic form state machine: idle → submitting → success/error
  */
 
-const TITLE = "Join the Ductly newsletter";
+const TITLE = "Get 50% off your first cleaning";
 const SUBTITLE =
-  "Seasonal offers, cleaning tips, and air-quality advice. No spam, ever.";
-const CTA = "Subscribe";
-const SUCCESS_TITLE = "You're subscribed!";
-const SUCCESS_BODY = "Welcome to the Ductly newsletter. Talk soon!";
+  "Enter your email and we'll mark you as a customer. Your discount code is revealed right here — no spam, ever.";
+const CTA = "Get my code";
+const SUCCESS_TITLE = "Your 50% off code";
+const COUPON_CODE = "DUCTLY50";
+const SUCCESS_BODY = "Use this code at checkout for 50% off your first cleaning.";
 const ENDPOINT = "/api/newsletter";
 const ONCE_KEY = "ductly_popup_newsletter_seen";
 const DELAY_MS = 4000;
@@ -142,6 +143,14 @@ export default function PromoPopup() {
             <h3 className="text-[22px] font-normal tracking-[-0.03em] text-[rgb(61,61,61)] mb-2" style={{ fontFamily: "var(--font-heading)" }}>
               {SUCCESS_TITLE}
             </h3>
+            <div
+              className="mx-auto max-w-[240px] rounded-[12px] py-3 px-4 mb-3 border-2 border-dashed"
+              style={{ borderColor: "rgb(147,216,216)", background: "rgb(246,252,252)" }}
+            >
+              <span className="text-[22px] font-semibold tracking-[0.12em] text-[rgb(38,120,116)]" style={{ fontFamily: "var(--font-cta)" }}>
+                {COUPON_CODE}
+              </span>
+            </div>
             <p className="text-[15px] text-[rgb(109,109,109)] leading-[1.5]" style={{ fontFamily: "var(--font-body)" }}>
               {SUCCESS_BODY}
             </p>

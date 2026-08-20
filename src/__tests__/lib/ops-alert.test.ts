@@ -1,79 +1,99 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const mockFireN8nWebhook = vi.fn();
-vi.mock("@/lib/n8n", () => ({
-  fireN8nWebhook: (...args: unknown[]) => mockFireN8nWebhook(...args),
+const mockSendWhatsAppTemplate = vi.fn();
+vi.mock("@/lib/twilio-whatsapp", () => ({
+  sendWhatsAppTemplate: (...args: unknown[]) => mockSendWhatsAppTemplate(...args),
+}));
+vi.mock("@/utils/supabase/admin", () => ({
+  supabaseAdmin: {
+    from: () => ({
+      insert: () => ({ then: (cb: () => void) => cb() }),
+    }),
+  },
 }));
 
 import { fireOpsAlert } from "@/lib/ops-alert";
 
-const OPS_URL = "https://n8n.example.com/webhook/ops-alert";
+const SID = "HXopsalert";
 
 describe("fireOpsAlert", () => {
-  const originalEnv = process.env.N8N_WEBHOOK_OPS_ALERT;
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    if (originalEnv === undefined) delete process.env.N8N_WEBHOOK_OPS_ALERT;
-    else process.env.N8N_WEBHOOK_OPS_ALERT = originalEnv;
+    delete process.env.OWNER_WHATSAPP;
+    delete process.env.TWILIO_CONTENT_SID_DUCTLY_OPS_ALERT;
   });
 
-  it("is a no-op when N8N_WEBHOOK_OPS_ALERT is unset (dormant)", () => {
-    delete process.env.N8N_WEBHOOK_OPS_ALERT;
+  it("is a no-op when OWNER_WHATSAPP is unset (dormant)", () => {
+    delete process.env.OWNER_WHATSAPP;
+    process.env.TWILIO_CONTENT_SID_DUCTLY_OPS_ALERT = SID;
 
     fireOpsAlert("new_booking", { bookingId: "book-1" });
 
-    expect(mockFireN8nWebhook).not.toHaveBeenCalled();
+    expect(mockSendWhatsAppTemplate).not.toHaveBeenCalled();
   });
 
-  it("fires to the ops-alert flow with the mapped label and normalized fields", () => {
-    process.env.N8N_WEBHOOK_OPS_ALERT = OPS_URL;
+  it("is a no-op when the content SID is missing (dormant)", () => {
+    process.env.OWNER_WHATSAPP = "+971558190717";
+    delete process.env.TWILIO_CONTENT_SID_DUCTLY_OPS_ALERT;
+
+    fireOpsAlert("new_booking", { bookingId: "book-1" });
+
+    expect(mockSendWhatsAppTemplate).not.toHaveBeenCalled();
+  });
+
+  it("fans out to every number in the comma-separated OWNER_WHATSAPP", async () => {
+    process.env.OWNER_WHATSAPP = " +971558190717 , +971502749454,+917042009519 ";
+    process.env.TWILIO_CONTENT_SID_DUCTLY_OPS_ALERT = SID;
+    mockSendWhatsAppTemplate.mockResolvedValue({ ok: true });
 
     fireOpsAlert("cancellation", {
       bookingId: "book-9",
       customerName: "Jane Doe",
-      customerPhone: "+971501234567",
       slotStart: "2026-04-20T10:00:00+04:00",
-      extra: "By customer · Refund: succeeded",
-      source: "customer_cancellation",
+      extra: "By customer",
     });
 
-    expect(mockFireN8nWebhook).toHaveBeenCalledTimes(1);
-    const [flowName, url, payload] = mockFireN8nWebhook.mock.calls[0];
-    expect(flowName).toBe("ops_alert");
-    expect(url).toBe(OPS_URL);
-    expect(payload).toMatchObject({
-      event: "ops_alert",
-      alert_type: "cancellation",
-      alert_label: "Cancellation",
-      booking_id: "book-9",
-      customer_name: "Jane Doe",
-      customer_phone: "+971501234567",
-      slot_start: "2026-04-20T10:00:00+04:00",
-      address: "",
-      team_name: "",
-      extra: "By customer · Refund: succeeded",
-      source: "customer_cancellation",
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockSendWhatsAppTemplate).toHaveBeenCalledTimes(3);
+    const tos = mockSendWhatsAppTemplate.mock.calls.map((c) => c[0]);
+    expect(tos).toEqual(["+971558190717", "+971502749454", "+917042009519"]);
+  });
+
+  it("maps the event label and formats the slot time into template variables", async () => {
+    process.env.OWNER_WHATSAPP = "+971558190717";
+    process.env.TWILIO_CONTENT_SID_DUCTLY_OPS_ALERT = SID;
+    mockSendWhatsAppTemplate.mockResolvedValue({ ok: true });
+
+    fireOpsAlert("new_booking", {
+      bookingId: "book-9",
+      customerName: "Jane Doe",
+      slotStart: "2026-04-20T10:00:00+04:00",
+      address: "Business Bay",
+      teamName: "Team A",
+      extra: "Signature Plan · AED 549",
     });
-    // when_human is derived from slot_start (UAE-local, 12h)
-    expect(payload.when_human).toContain("10:00 AM");
+
+    await new Promise((r) => setTimeout(r, 0));
+
+    const [, , variables] = mockSendWhatsAppTemplate.mock.calls[0];
+    expect(variables).toMatchObject({
+      "1": "New Booking",
+      "2": "Jane Doe",
+      "4": "Business Bay",
+      "5": "Team A",
+      "6": "Signature Plan · AED 549",
+    });
+    expect(variables["3"]).toContain("10:00 AM");
   });
 
-  it("leaves when_human empty when no slotStart is given", () => {
-    process.env.N8N_WEBHOOK_OPS_ALERT = OPS_URL;
-
-    fireOpsAlert("blackout", { extra: "All teams" });
-
-    const [, , payload] = mockFireN8nWebhook.mock.calls[0];
-    expect(payload.alert_label).toBe("Calendar Blocked");
-    expect(payload.when_human).toBe("");
-  });
-
-  it("maps every event type to a human label", () => {
-    process.env.N8N_WEBHOOK_OPS_ALERT = OPS_URL;
+  it("maps every event type to a human label", async () => {
+    process.env.OWNER_WHATSAPP = "+971558190717";
+    process.env.TWILIO_CONTENT_SID_DUCTLY_OPS_ALERT = SID;
+    mockSendWhatsAppTemplate.mockResolvedValue({ ok: true });
 
     const expected: Record<string, string> = {
       new_booking: "New Booking",
@@ -84,13 +104,15 @@ describe("fireOpsAlert", () => {
       job_not_completed: "Job NOT Completed",
       payment_orphan: "PAID but NOT booked",
       invoice_failed: "Invoice FAILED",
+      refund_required: "REFUND REQUIRED",
     };
 
     for (const [event, label] of Object.entries(expected)) {
-      mockFireN8nWebhook.mockClear();
+      mockSendWhatsAppTemplate.mockClear();
       fireOpsAlert(event as Parameters<typeof fireOpsAlert>[0], {});
-      const [, , payload] = mockFireN8nWebhook.mock.calls[0];
-      expect(payload.alert_label).toBe(label);
+      await new Promise((r) => setTimeout(r, 0));
+      const [, , variables] = mockSendWhatsAppTemplate.mock.calls[0];
+      expect(variables["1"]).toBe(label);
     }
   });
 });
