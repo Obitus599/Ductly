@@ -78,12 +78,13 @@ function StepIndicator({ current }: { current: Step }) {
 function BookingFlow() {
   const searchParams = useSearchParams();
   const planFromUrl = searchParams.get("plan");
-  const [planKey, setPlanKey] = useState<string | null>(
-    planFromUrl && PLANS[planFromUrl] ? planFromUrl : null
-  );
+  const initialPlan = planFromUrl && PLANS[planFromUrl] ? planFromUrl : null;
+  const [planKey, setPlanKey] = useState<string | null>(initialPlan);
   const plan = planKey ? PLANS[planKey] : null;
 
-  const [step, setStep] = useState<Step>("plan");
+  // A plan already chosen via the URL skips the plan picker and starts on
+  // the details step; otherwise the plan picker is shown first.
+  const [step, setStep] = useState<Step>(initialPlan ? "details" : "plan");
 
   /* form state */
   const [name, setName] = useState("");
