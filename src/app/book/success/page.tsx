@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { filsToAedString, VAT_RATE_PERCENT } from "@/lib/vat";
@@ -23,6 +23,35 @@ function SuccessContent() {
   const sessionId = searchParams.get("session_id");
   const bookingId = searchParams.get("booking_id");
   const [details, setDetails] = useState<BookingDetails | null>(null);
+  const firedRef = useRef(false);
+
+  // Fire the GA4 "purchase" conversion once the booking is confirmed so
+  // linked Google Ads can count it. Guards against double-firing on re-render.
+  useEffect(() => {
+    if (!details || firedRef.current) return;
+    firedRef.current = true;
+    try {
+      const gtag = (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag;
+      if (typeof gtag === "function") {
+        const value = (details.price_total_fils || 0) / 100; // AED major units
+        gtag("event", "purchase", {
+          transaction_id: bookingId || sessionId || undefined,
+          value,
+          currency: "AED",
+          items: [
+            {
+              item_id: details.plan,
+              item_name: `${details.plan.charAt(0).toUpperCase()}${details.plan.slice(1)} Plan`,
+              quantity: 1,
+              price: value,
+            },
+          ],
+        });
+      }
+    } catch {
+      // Analytics must never break the success page.
+    }
+  }, [details, bookingId, sessionId]);
 
   useEffect(() => {
     // Stripe returns with a session_id; Tabby (and other DB-backed
