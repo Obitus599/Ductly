@@ -214,12 +214,13 @@ function BookingFlow() {
     return () => window.removeEventListener("beforeunload", handleUnload);
   }, [lock, sessionId]);
 
-  /* min date = max of (tomorrow, Aug 31 2026) so pre-launch dates are disabled */
+  /* min date = max of (tomorrow, Aug 27 2026). Individual blocked days
+     (Aug 28, Aug 30) are handled by schedule blackouts. */
   const minDate = useMemo(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const ts = tomorrow.toISOString().split("T")[0];
-    const launch = "2026-08-31";
+    const launch = "2026-08-27";
     return ts > launch ? ts : launch;
   }, []);
 
